@@ -1,0 +1,19 @@
+{
+  "name": "cctvgo",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "build-frontend": "cd ../frontend && npm install && npm run build",
+    "start": "node server.js",
+    "start:all": "npm run build-frontend && npm start"
+  },
+  "keywords": [],
+  "author": "김장현",
+  "description": "RTSP → HLS 변환 후 웹으로 CCTV 영상 스트리밍",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.0",
+    "express": "^4.21.2",
+    "express-session": "^1.18.2"
+  }
+}
