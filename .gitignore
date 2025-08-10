@@ -5,3 +5,8 @@
 /frontend/dist
 
 /hls
+cloudflare/customer_user1.zip
+cloudflare/customer_user1/c3329c2b-47ec-4ee8-bce2-15d4766b8924.json
+cloudflare/customer_user1/cloudflared.exe
+cloudflare/customer_user1/config.yml
+cloudflare/customer_user1/start_tunnel.bat
