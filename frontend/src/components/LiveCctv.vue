@@ -198,40 +198,53 @@ function finishEditing(index) {
 </script>
 
 <style scoped>
+/* html, body 기본 설정 */
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden; /* 스크롤바 숨김 */
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* 전체 페이지 래퍼 */
 .page-wrapper {
   width: 100%;
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 10px 15px;
+  height: 100vh; /* 뷰포트 전체 높이 */
+  margin: 0;
+  padding: 10px;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  overflow: hidden; /* 내부 스크롤 방지 */
 }
 
+/* 상단 제목 */
 h2 {
   width: 100%;
-  margin-bottom: 15px;
+  margin-bottom: 10px;
   word-break: keep-all;
   white-space: nowrap;
   overflow: visible;
   text-align: center;
 }
 
+/* 카메라 칩 리스트 */
 .camera-list {
   display: flex;
-  margin-top: 15px;
+  margin-top: 10px;
   gap: 8px;
   justify-content: center;
   flex-wrap: wrap;
+  user-select: none;
 }
 
+/* 각 카메라 칩 스타일 */
 .camera-chip {
   background: #eee;
   padding: 6px 10px;
   border-radius: 16px;
   cursor: pointer;
-  user-select: none;
   font-size: 14px;
   transition: background 0.2s, border-color 0.2s;
   border: 2px solid transparent;
@@ -246,20 +259,23 @@ h2 {
   background: #cce5ff;
 }
 
+/* CCTV 영상 4분할 그리드 */
 .video-grid {
+  flex: 1; /* 상단 제목과 카메라 리스트 제외한 남은 공간 전부 차지 */
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
+  grid-template-rows: repeat(2, 1fr);
+  gap: 6px;
   width: 100%;
-  max-width: 960px;
-  margin: 0 auto;
+  height: 100%; /* 부모 높이 모두 채움 */
+  overflow: hidden; /* 스크롤 안 생기게 */
 }
 
+/* 각각 영상 컨테이너 */
 .video-container {
   position: relative;
   width: 100%;
   height: 100%;
-  aspect-ratio: 16 / 9;
   background: black;
   overflow: hidden;
   cursor: pointer;
@@ -276,12 +292,14 @@ h2 {
   box-shadow: 0 0 8px rgba(0, 123, 255, 0.7);
 }
 
+/* 영상 태그 */
 .video-player {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: cover; /* 영상 꽉 채우기 */
 }
 
+/* 영상 레이블 (채널명) */
 .video-label {
   position: absolute;
   top: 4px;
@@ -295,6 +313,7 @@ h2 {
   cursor: pointer;
 }
 
+/* 채널명 수정 input */
 .video-name-input {
   font-size: 12px;
   padding: 2px 4px;
@@ -302,6 +321,7 @@ h2 {
   border-radius: 4px;
 }
 
+/* 할당 메시지 */
 .assign-message {
   position: fixed;
   bottom: 20px;
@@ -318,6 +338,7 @@ h2 {
   z-index: 9999;
 }
 
+/* fade transition 효과 */
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.4s;
@@ -327,4 +348,5 @@ h2 {
 .fade-leave-to {
   opacity: 0;
 }
+
 </style>
