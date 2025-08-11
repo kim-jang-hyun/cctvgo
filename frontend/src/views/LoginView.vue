@@ -44,22 +44,23 @@ html, body {
   height: 100%;
   margin: 0;
   padding: 0;
-  background: white; /* 기본 배경색 */
+  background: white;
+  overflow: hidden;  /* 전체 스크롤도 막음 */
 }
 
 .login-container {
-  background: transparent; /* 투명 */
   min-height: 100vh;
   display: flex;
-  justify-content: center; /* 가로 중앙 */
-  align-items: flex-start;  /* 세로 위쪽 정렬 */
-  padding: 40px 0;
+  justify-content: center;
+  align-items: center;  /* 세로 중앙 */
+  padding: 0;
   box-sizing: border-box;
-  overflow-y: auto;
+  overflow: hidden;
+  background: transparent;
 }
 
 .login-box {
-  background: rgba(26, 26, 26, 0.85); /* 어두운 반투명 배경 */
+  background: rgba(26, 26, 26, 0.85);
   border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 16px;
   padding: 40px;
