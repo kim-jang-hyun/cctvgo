@@ -45,25 +45,26 @@ html, body {
   margin: 0;
   padding: 0;
   background: white;
-  overflow: hidden;  /* 전체 스크롤도 막음 */
+  overflow: hidden;
 }
 
+/* 중앙 정렬 컨테이너 */
 .login-container {
-  min-height: 100vh;
+  min-height: 100vh;            /* 화면 전체 높이 */
   display: flex;
-  justify-content: center;
-  align-items: center;  /* 세로 중앙 */
-  padding: 0;
+  justify-content: center;      /* 가로 중앙 */
+  align-items: center;          /* 세로 중앙 */
+  padding: 16px;
   box-sizing: border-box;
-  overflow: hidden;
   background: transparent;
 }
 
+/* 로그인 박스 */
 .login-box {
   background: rgba(26, 26, 26, 0.85);
   border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 16px;
-  padding: 40px;
+  padding: 40px 24px;
   width: 100%;
   max-width: 360px;
   min-height: 400px;
@@ -100,7 +101,7 @@ html, body {
 .input,
 .button {
   width: 100%;
-  box-sizing: border-box; /* 패딩 포함 크기 계산 */
+  box-sizing: border-box;
   padding: 12px;
   border-radius: 8px;
   border: none;
@@ -134,5 +135,13 @@ html, body {
   font-size: 12px;
   color: #aaaaaa;
   margin-top: auto;
+}
+
+/* 모바일 대응 */
+@media (max-width: 768px) {
+  .login-container {
+    align-items: flex-start;    /* 화면 위쪽에 배치 */
+    padding-top: 80px;          /* 위쪽 여백 */
+  }
 }
 </style>
