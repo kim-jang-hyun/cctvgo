@@ -64,7 +64,7 @@
   <!-- 하단 메시지 -->
   <transition name="fade">
     <div v-if="showMessage" class="assign-message">
-      위 영상에 할당해 주세요.
+      영상을 표시할 영역을 선택해 주세요.
     </div>
   </transition>
 </template>
