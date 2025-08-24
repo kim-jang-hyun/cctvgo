@@ -210,13 +210,13 @@ html, body {
 /* 전체 페이지 래퍼 */
 .page-wrapper {
   width: 100%;
-  height: 100vh; /* 뷰포트 전체 높이 */
+  height: 100vh;  /* 뷰포트 전체 채우기 */
   margin: 0;
-  padding: 10px;
+  padding: 0 0 16px 0; /* 아래 칩 버튼 여백 포함 */
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  overflow: hidden; /* 내부 스크롤 방지 */
+  overflow: hidden;
 }
 
 /* 상단 제목 */
@@ -288,8 +288,8 @@ h2 {
 }
 
 .video-container.highlight {
-  border: 4px solid #007bff;
-  box-shadow: 0 0 8px rgba(0, 123, 255, 0.7);
+  border: 2px solid #007bff;
+  box-shadow: 0 0 12px rgba(0, 123, 255, 0.5);
 }
 
 /* 영상 태그 */
@@ -348,5 +348,18 @@ h2 {
 .fade-leave-to {
   opacity: 0;
 }
+
+/* 로그인 화면의 가운데 정렬 스타일 무시 */
+:global(body),
+:global(#app) {
+  display: block !important;
+  place-items: unset !important;
+  max-width: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  width: 100% !important;
+  height: 100vh !important;
+}
+
 
 </style>
