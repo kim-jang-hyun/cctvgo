@@ -12,7 +12,9 @@
       @click.stop
     >
       <template #item="{ element, index }">
+        <!-- 모바일에서는 선택된 채널만 표시 -->
         <div
+          v-if="!isMobile || selectedCamera?.url === element.url"
           class="video-container"
           :class="{ highlight: selectedCamera !== null }"
           @click="assignSelectedCamera(index)"
@@ -74,6 +76,7 @@ import { ref, reactive, onMounted, nextTick, onBeforeUnmount } from 'vue';
 import Hls from 'hls.js';
 import draggable from 'vuedraggable';
 
+// 카메라 리스트
 const cameraList = ref([
   { id: 'cam1', name: 'Camera 1', url: '/hls/stream1.m3u8' },
   { id: 'cam2', name: 'Camera 2', url: '/hls/stream2.m3u8' },
@@ -82,6 +85,7 @@ const cameraList = ref([
   { id: 'cam5', name: 'Camera 5', url: '/hls/stream5.m3u8' }
 ]);
 
+// 현재 화면에 표시할 영상 영역
 const streams = ref([
   { id: 1, name: 'Camera 1', url: '/hls/stream1.m3u8' },
   { id: 2, name: 'Camera 2', url: '/hls/stream2.m3u8' },
@@ -89,15 +93,30 @@ const streams = ref([
   { id: 4, name: 'Camera 4', url: '/hls/stream4.m3u8' }
 ]);
 
+// 채널명 수정 관련
 const editingIndex = ref(null);
 const editedName = ref('');
+
+// 선택된 카메라
 const selectedCamera = ref(null);
+
+// 하단 메시지 표시 여부
 const showMessage = ref(false);
 let messageTimeout = null;
 
+// 모바일 여부 체크
+const isMobile = ref(false);
+
+// HLS 인스턴스와 비디오 태그 ref
 const hlsInstances = [];
 const videoElements = reactive([]);
 
+// 모바일 여부 감지
+const checkMobile = () => {
+  isMobile.value = window.innerWidth <= 768;
+};
+
+// HLS 플레이어 초기화
 const initPlayers = () => {
   hlsInstances.forEach(hls => hls.destroy());
   hlsInstances.length = 0;
@@ -119,6 +138,7 @@ const initPlayers = () => {
   });
 };
 
+// 칩 선택
 const selectCamera = (cam) => {
   if (selectedCamera.value && selectedCamera.value.id === cam.id) {
     // 선택된 칩 다시 클릭 시 선택 취소
@@ -135,11 +155,10 @@ const selectCamera = (cam) => {
   }
 };
 
+// 선택된 카메라를 영상뷰에 할당
 const assignSelectedCamera = async (index) => {
-  if (!selectedCamera.value) {
-    // 선택된 채널 없으면 아무 동작 안 함
-    return;
-  }
+  if (!selectedCamera.value) return;
+
   streams.value[index] = {
     ...streams.value[index],
     name: selectedCamera.value.name,
@@ -151,13 +170,14 @@ const assignSelectedCamera = async (index) => {
   initPlayers();
 };
 
+// 드래그&드롭 종료 후 플레이어 초기화
 const onDragEnd = async () => {
   await nextTick();
   initPlayers();
 };
 
+// 빈 영역 클릭 시 선택 취소
 const onPageClick = () => {
-  // 빈 영역 클릭 시 선택된 칩 해제
   if (selectedCamera.value) {
     selectedCamera.value = null;
     showMessage.value = false;
@@ -177,18 +197,29 @@ const onKeyDown = (e) => {
 onMounted(async () => {
   await nextTick();
   initPlayers();
+  checkMobile();
+
+    // 모바일일 때 selectedCamera가 없으면 첫 번째 채널 선택
+  if (isMobile.value && !selectedCamera.value) {
+    selectedCamera.value = cameraList.value[0];
+  }
+  
   window.addEventListener('keydown', onKeyDown);
+  window.addEventListener('resize', checkMobile);
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeyDown);
+  window.removeEventListener('resize', checkMobile);
 });
 
+// 채널명 수정 시작
 function startEditing(index, currentName) {
   editingIndex.value = index;
   editedName.value = currentName;
 }
 
+// 채널명 수정 완료
 function finishEditing(index) {
   if (editedName.value.trim() !== '') {
     streams.value[index].name = editedName.value.trim();
@@ -349,6 +380,15 @@ h2 {
   opacity: 0;
 }
 
+/* 모바일에서 1채널만 보여주기 */
+@media (max-width: 768px) {
+  .video-grid {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: 1fr !important;
+    gap: 0 !important;
+  }
+}
+
 /* 로그인 화면의 가운데 정렬 스타일 무시 */
 :global(body),
 :global(#app) {
@@ -360,6 +400,4 @@ h2 {
   width: 100% !important;
   height: 100vh !important;
 }
-
-
 </style>
