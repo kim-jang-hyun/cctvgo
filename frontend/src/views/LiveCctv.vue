@@ -198,20 +198,32 @@ onMounted(async () => {
   await nextTick();
   initPlayers();
   checkMobile();
+  setVH();
 
-    // 모바일일 때 selectedCamera가 없으면 첫 번째 채널 선택
+  // 모바일일 때 selectedCamera가 없으면 첫 번째 채널 선택
   if (isMobile.value && !selectedCamera.value) {
     selectedCamera.value = cameraList.value[0];
   }
   
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('resize', checkMobile);
+  window.addEventListener("resize", setVH);
 });
+
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeyDown);
   window.removeEventListener('resize', checkMobile);
+  window.removeEventListener("resize", setVH);
 });
+
+function setVH() {
+  // 모바일일 때만 적용
+  if (isMobile) {
+    const vh = (window.innerHeight) * 0.01;
+    document.documentElement.style.setProperty("--vh", `${vh}px`);
+  }
+}
 
 // 채널명 수정 시작
 function startEditing(index, currentName) {
@@ -229,19 +241,10 @@ function finishEditing(index) {
 </script>
 
 <style scoped>
-/* html, body 기본 설정 */
-html, body {
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  overflow: hidden; /* 스크롤바 숨김 */
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-}
-
 /* 전체 페이지 래퍼 */
 .page-wrapper {
   width: 100%;
-  height: 100vh;  /* 뷰포트 전체 채우기 */
+  height: 100dvh;
   margin: 0;
   padding: 0 0 16px 0; /* 아래 칩 버튼 여백 포함 */
   box-sizing: border-box;
@@ -383,6 +386,8 @@ h2 {
 /* 모바일에서 1채널만 보여주기 */
 @media (max-width: 768px) {
   .video-grid {
+    height: calc(var(--vh, 1vh) * 100); /* 100배 곱해줘야 100vh */
+
     grid-template-columns: 1fr !important;
     grid-template-rows: 1fr !important;
     gap: 0 !important;
