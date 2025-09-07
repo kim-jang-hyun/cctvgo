@@ -389,15 +389,4 @@ h2 {
   }
 }
 
-/* 로그인 화면의 가운데 정렬 스타일 무시 */
-:global(body),
-:global(#app) {
-  display: block !important;
-  place-items: unset !important;
-  max-width: none !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  width: 100% !important;
-  height: 100vh !important;
-}
 </style>

@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import LoginView from '../views/LoginView.vue'
-import LiveCctv from '../components/LiveCctv.vue'
+import LiveCctv from '../views/LiveCctv.vue'
 
 const routes = [
   { path: '/login', component: LoginView },

@@ -39,18 +39,10 @@ const login = async () => {
 }
 </script>
 
-<style>
-html, body {
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  background: white;
-  overflow: hidden;
-}
-
+<style scoped>
 /* 중앙 정렬 컨테이너 */
 .login-container {
-  min-height: 100vh;            /* 화면 전체 높이 */
+  height: 100vh;   /* 화면 전체 높이 */
   display: flex;
   justify-content: center;      /* 가로 중앙 */
   align-items: center;          /* 세로 중앙 */
