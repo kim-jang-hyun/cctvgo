@@ -78,19 +78,19 @@ import draggable from 'vuedraggable';
 
 // 카메라 리스트
 const cameraList = ref([
-  { id: 'cam1', name: 'Camera 1', url: '/hls/stream1.m3u8' },
-  { id: 'cam2', name: 'Camera 2', url: '/hls/stream2.m3u8' },
-  { id: 'cam3', name: 'Camera 3', url: '/hls/stream3.m3u8' },
-  { id: 'cam4', name: 'Camera 4', url: '/hls/stream4.m3u8' },
-  { id: 'cam5', name: 'Camera 5', url: '/hls/stream5.m3u8' }
+  { id: 'cam1', name: 'Camera 1', url: '/hls/stream.m3u8' },
+  { id: 'cam2', name: 'Camera 2', url: '/hls/stream.m3u8' },
+  { id: 'cam3', name: 'Camera 3', url: '/hls/stream.m3u8' },
+  { id: 'cam4', name: 'Camera 4', url: '/hls/stream.m3u8' },
+  { id: 'cam5', name: 'Camera 5', url: '/hls/stream.m3u8' }
 ]);
 
 // 현재 화면에 표시할 영상 영역
 const streams = ref([
-  { id: 1, name: 'Camera 1', url: '/hls/stream1.m3u8' },
-  { id: 2, name: 'Camera 2', url: '/hls/stream2.m3u8' },
-  { id: 3, name: 'Camera 3', url: '/hls/stream3.m3u8' },
-  { id: 4, name: 'Camera 4', url: '/hls/stream4.m3u8' }
+  { id: 1, name: 'Camera 1', url: '/hls/stream.m3u8' },
+  { id: 2, name: 'Camera 2', url: '/hls/stream.m3u8' },
+  { id: 3, name: 'Camera 3', url: '/hls/stream.m3u8' },
+  { id: 4, name: 'Camera 4', url: '/hls/stream.m3u8' }
 ]);
 
 // 채널명 수정 관련
