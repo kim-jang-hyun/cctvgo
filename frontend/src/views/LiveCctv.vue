@@ -4,7 +4,7 @@
 
     <!-- 채널 뷰어 (드래그앤드랍 가능) -->
     <draggable
-      v-model="streams"
+      v-model="activeStreams"
       item-key="id"
       class="video-grid"
       :group="{ name: 'channels', pull: true, put: true }"
@@ -72,26 +72,61 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, nextTick, onBeforeUnmount } from 'vue';
+import { ref, reactive, onMounted, nextTick, onBeforeUnmount, computed } from 'vue';
 import Hls from 'hls.js';
 import draggable from 'vuedraggable';
 
 // 카메라 리스트
 const cameraList = ref([
-  { id: 'cam1', name: 'Camera 1', url: '/hls/stream.m3u8' },
-  { id: 'cam2', name: 'Camera 2', url: '/hls/stream.m3u8' },
-  { id: 'cam3', name: 'Camera 3', url: '/hls/stream.m3u8' },
-  { id: 'cam4', name: 'Camera 4', url: '/hls/stream.m3u8' },
-  { id: 'cam5', name: 'Camera 5', url: '/hls/stream.m3u8' }
+  { id: 'cam1', name: 'Camera 1', url: '/hls/stream1/stream1.m3u8', viewIndex: 1 },
+  { id: 'cam2', name: 'Camera 2', url: '/hls/stream2/stream2.m3u8', viewIndex: 2 },
+  { id: 'cam3', name: 'Camera 3', url: '/hls/stream3/stream3.m3u8', viewIndex: 3 },
+  { id: 'cam4', name: 'Camera 4', url: '/hls/stream4/stream4.m3u8', viewIndex: 4 },
+  { id: 'cam5', name: 'Camera 5', url: '/hls/stream5/stream5.m3u8', viewIndex: null },
+  { id: 'cam6', name: 'Camera 6', url: '/hls/stream6/stream6.m3u8', viewIndex: null },
+  { id: 'cam7', name: 'Camera 7', url: '/hls/stream7/stream7.m3u8', viewIndex: null },
+  { id: 'cam8', name: 'Camera 8', url: '/hls/stream8/stream8.m3u8', viewIndex: null },
+  { id: 'cam9', name: 'Camera 9', url: '/hls/stream9/stream9.m3u8', viewIndex: null },
+  { id: 'cam10', name: 'Camera 10', url: '/hls/stream10/stream10.m3u8', viewIndex: null },
+  { id: 'cam11', name: 'Camera 11', url: '/hls/stream11/stream11.m3u8', viewIndex: null },
+  { id: 'cam12', name: 'Camera 12', url: '/hls/stream12/stream12.m3u8', viewIndex: null },
+  { id: 'cam13', name: 'Camera 13', url: '/hls/stream13/stream13.m3u8', viewIndex: null },
+  { id: 'cam14', name: 'Camera 14', url: '/hls/stream14/stream14.m3u8', viewIndex: null },
+  { id: 'cam15', name: 'Camera 15', url: '/hls/stream15/stream15.m3u8', viewIndex: null },
+  { id: 'cam16', name: 'Camera 16', url: '/hls/stream16/stream16.m3u8', viewIndex: null },
 ]);
 
-// 현재 화면에 표시할 영상 영역
-const streams = ref([
-  { id: 1, name: 'Camera 1', url: '/hls/stream.m3u8' },
-  { id: 2, name: 'Camera 2', url: '/hls/stream.m3u8' },
-  { id: 3, name: 'Camera 3', url: '/hls/stream.m3u8' },
-  { id: 4, name: 'Camera 4', url: '/hls/stream.m3u8' }
-]);
+// 💡 뷰에 렌더링할 최종 스트림 데이터 계산된 속성 (Setter 추가)
+const activeStreams = computed({
+  // Getter: 화면에 표시할 카메라 목록을 필터링하고 정렬하여 반환 (기존 로직 유지)
+  get() {
+    // 1. viewIndex가 있는(할당된) 카메라만 필터링
+    const assignedCams = cameraList.value.filter(cam => cam.viewIndex !== null);
+    
+    // 2. viewIndex 순서대로 정렬
+    assignedCams.sort((a, b) => a.viewIndex - b.viewIndex);
+    
+    return assignedCams;
+  },
+  
+  // 💡 Setter: v-model (draggable)을 통해 배열의 순서가 변경되었을 때 호출됨
+  set(newStreams) {
+    // 1. 새로운 순서(newStreams)를 기반으로 cameraList의 viewIndex를 업데이트
+    newStreams.forEach((newCam, index) => {
+      const originalIndex = cameraList.value.findIndex(c => c.id === newCam.id);
+      if (originalIndex !== -1) {
+        // index는 0부터 시작, viewIndex는 1부터 시작
+        // 💡 newStreams의 순서(index + 1)를 cameraList의 viewIndex에 반영
+        cameraList.value[originalIndex].viewIndex = index + 1;
+      }
+    });
+
+    // 2. viewIndex가 변경되면, Getter가 다시 실행되어 activeStreams가 정확히 갱신됩니다.
+
+    // saveConfig(); // 💡 드래그 드롭 시 자동 저장 로직을 여기에 추가하는 것이 더 적절합니다.
+  }
+});
+
 
 // 채널명 수정 관련
 const editingIndex = ref(null);
@@ -121,7 +156,7 @@ const initPlayers = () => {
   hlsInstances.forEach(hls => hls.destroy());
   hlsInstances.length = 0;
 
-  streams.value.forEach((stream, index) => {
+  activeStreams.value.forEach((stream, index) => {
     const video = videoElements[index];
     if (!video) return;
 
@@ -159,15 +194,27 @@ const selectCamera = (cam) => {
 const assignSelectedCamera = async (index) => {
   if (!selectedCamera.value) return;
 
-  streams.value[index] = {
-    ...streams.value[index],
-    name: selectedCamera.value.name,
-    url: selectedCamera.value.url
-  };
+  // 1. 할당 해제: 현재 뷰 영역(index)에 있던 카메라의 viewIndex를 null로 설정
+  const currentCamInView = activeStreams.value[index];
+  if (currentCamInView) {
+    const originalIndex = cameraList.value.findIndex(c => c.id === currentCamInView.id);
+    if (originalIndex !== -1) {
+      cameraList.value[originalIndex].viewIndex = null;
+    }
+  }
+
+  // 2. 새 할당: 선택된 카메라(selectedCamera)에 viewIndex를 설정하고 name을 업데이트
+  const selectedIndex = cameraList.value.findIndex(c => c.id === selectedCamera.value.id);
+  if (selectedIndex !== -1) {
+    // 💡 viewIndex는 1부터 시작 (index + 1)
+    cameraList.value[selectedIndex].viewIndex = index + 1;
+  }
+
   selectedCamera.value = null;
 
   await nextTick();
   initPlayers();
+  // saveConfig(); // 백엔드 저장 로직 추가 위치
 };
 
 // 드래그&드롭 종료 후 플레이어 초기화
@@ -234,7 +281,16 @@ function startEditing(index, currentName) {
 // 채널명 수정 완료
 function finishEditing(index) {
   if (editedName.value.trim() !== '') {
-    streams.value[index].name = editedName.value.trim();
+    // 1. 현재 activeStreams에서 변경 대상 카메라 ID를 가져옴
+    const targetId = activeStreams.value[index].id;
+    
+    // 2. cameraList에서 해당 ID를 가진 원본 카메라의 name 필드를 수정
+    const originalIndex = cameraList.value.findIndex(c => c.id === targetId);
+    if (originalIndex !== -1) {
+      // 💡 name 필드를 직접 사용자 지정 이름으로 사용
+      cameraList.value[originalIndex].name = editedName.value.trim();
+      // saveConfig(); // 백엔드 저장 로직 추가 위치
+    }
   }
   editingIndex.value = null;
 }
