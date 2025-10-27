@@ -76,6 +76,45 @@ import { ref, reactive, onMounted, nextTick, onBeforeUnmount, computed } from 'v
 import Hls from 'hls.js';
 import draggable from 'vuedraggable';
 
+// 상태 변수 정의
+const streamCount = ref(0);
+const loading = ref(true);
+const error = ref(null);
+
+const endpoint = '/api/stream-count';
+
+/**
+ * 백엔드에서 스트림 폴더 개수를 가져오는 비동기 함수
+ */
+const fetchStreamCount = async () => {
+  loading.value = true; // 로딩 시작
+  error.value = null;   // 에러 초기화
+
+  try {
+    const res = await fetch(endpoint);
+    
+    if (!res.ok) {
+      // HTTP 4xx, 5xx 에러 처리
+      const errorData = await res.json();
+      throw new Error(errorData.message || `Failed to fetch: ${res.status} ${res.statusText}`);
+    }
+
+    const data = await res.json();
+    
+    // 성공적으로 데이터를 받으면 streamCount 업데이트
+    streamCount.value = data.streamFolderCount;
+    alert(streamCount.value);
+    
+  } catch (err) {
+    // 네트워크 오류 또는 throw된 오류 처리
+    console.error('API call error:', err);
+    error.value = err.message;
+    streamCount.value = 0;
+  } finally {
+    loading.value = false; // 로딩 완료
+  }
+};
+
 // 카메라 리스트
 const cameraList = ref([
   { id: 'cam1', name: 'Camera 1', url: '/hls/stream1/stream1.m3u8', viewIndex: 1 },
@@ -242,6 +281,8 @@ const onKeyDown = (e) => {
 };
 
 onMounted(async () => {
+  fetchStreamCount();
+
   await nextTick();
   initPlayers();
   checkMobile();
