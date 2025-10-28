@@ -87,37 +87,51 @@ const endpoint = '/api/stream-count';
  * 백엔드에서 스트림 폴더 개수를 가져오는 비동기 함수
  */
 const fetchStreamCount = async () => {
-  loading.value = true; // 로딩 시작
-  error.value = null;   // 에러 초기화
+    loading.value = true; // 로딩 시작
+    error.value = null;   // 에러 초기화
 
-  try {
-    const res = await fetch(endpoint);
-    
-    if (!res.ok) {
-      // HTTP 4xx, 5xx 에러 처리
-      const errorData = await res.json();
-      throw new Error(errorData.message || `Failed to fetch: ${res.status} ${res.statusText}`);
+    try {
+        const res = await fetch(endpoint);
+        
+        if (!res.ok) {
+            // HTTP 4xx, 5xx 에러 처리
+            const errorData = await res.json();
+            throw new Error(errorData.message || `Failed to fetch: ${res.status} ${res.statusText}`);
+        }
+
+        const data = await res.json();
+        
+        // 1. 성공적으로 데이터를 받으면 streamCount 업데이트
+        const count = Number(data.streamFolderCount); // 숫자로 변환
+        streamCount.value = count;
+
+        // 2. allCameras에서 streamCount 개수만큼만 cameraList를 초기화
+        if (count >= 0 && count <= allCameras.length) {
+            // 💡 allCameras의 일부를 cameraList에 할당하여 최종 목록으로 사용
+            cameraList.value = allCameras.slice(0, count);
+            console.log(`cameraList가 ${count}개로 초기화되었습니다.`, cameraList.value);
+        } else {
+            console.warn(`유효하지 않은 streamCount 값: ${count}. cameraList를 비웁니다.`);
+            cameraList.value = [];
+        }
+        
+    } catch (err) {
+        // 네트워크 오류 또는 throw된 오류 처리
+        console.error('API call error:', err);
+        error.value = err.message;
+        streamCount.value = 0;
+        cameraList.value = []; // 오류 시 빈 리스트
+    } finally {
+        loading.value = false; // 로딩 완료
     }
-
-    const data = await res.json();
-    
-    // 성공적으로 데이터를 받으면 streamCount 업데이트
-    streamCount.value = data.streamFolderCount;
-    alert(streamCount.value);
-    
-  } catch (err) {
-    // 네트워크 오류 또는 throw된 오류 처리
-    console.error('API call error:', err);
-    error.value = err.message;
-    streamCount.value = 0;
-  } finally {
-    loading.value = false; // 로딩 완료
-  }
 };
 
 // 카메라 리스트
-const cameraList = ref([
-  { id: 'cam1', name: 'Camera 1', url: '/hls/stream1/stream1.m3u8', viewIndex: 1 },
+const cameraList = ref([]);
+
+const EMPTY_CAMERA = { id: 'empty', name: '빈 채널', url: null, viewIndex: null };
+const allCameras = [
+ { id: 'cam1', name: 'Camera 1', url: '/hls/stream1/stream1.m3u8', viewIndex: 1 },
   { id: 'cam2', name: 'Camera 2', url: '/hls/stream2/stream2.m3u8', viewIndex: 2 },
   { id: 'cam3', name: 'Camera 3', url: '/hls/stream3/stream3.m3u8', viewIndex: 3 },
   { id: 'cam4', name: 'Camera 4', url: '/hls/stream4/stream4.m3u8', viewIndex: 4 },
@@ -133,7 +147,7 @@ const cameraList = ref([
   { id: 'cam14', name: 'Camera 14', url: '/hls/stream14/stream14.m3u8', viewIndex: null },
   { id: 'cam15', name: 'Camera 15', url: '/hls/stream15/stream15.m3u8', viewIndex: null },
   { id: 'cam16', name: 'Camera 16', url: '/hls/stream16/stream16.m3u8', viewIndex: null },
-]);
+];
 
 // 💡 뷰에 렌더링할 최종 스트림 데이터 계산된 속성 (Setter 추가)
 const activeStreams = computed({
@@ -281,18 +295,18 @@ const onKeyDown = (e) => {
 };
 
 onMounted(async () => {
-  fetchStreamCount();
-
+  await fetchStreamCount();
   await nextTick();
+
   initPlayers();
   checkMobile();
   setVH();
 
-  // 모바일일 때 selectedCamera가 없으면 첫 번째 채널 선택
-  if (isMobile.value && !selectedCamera.value) {
-    selectedCamera.value = cameraList.value[0];
+  // 모바일일 때 selectedCamera가 없으면 첫 번째 채널 선택 (cameraList를 사용)
+  if (isMobile.value && !selectedCamera.value && cameraList.value.length > 0) {
+      selectedCamera.value = cameraList.value[0];
   }
-  
+
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('resize', checkMobile);
   window.addEventListener("resize", setVH);
