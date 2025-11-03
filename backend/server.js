@@ -62,16 +62,16 @@ app.post('/login', (req, res) => {
 
 /**
  * 스트림 폴더 개수를 응답하는 API 엔드포인트
- * GET /api/stream-count
+ * GET /api/get-camera-count
  */
-app.get('/api/stream-count', (req, res) => {
+app.get('/api/get-stream-count', (req, res) => {
     const result = countStreamFolders();
 
     if (result.success) {
         // 성공적으로 개수를 세었을 경우
         res.json({
             status: 'success',
-            streamFolderCount: result.count,
+            cameraCount: result.count,
             message: `Found ${result.count} stream folders in ${path.basename(HLS_DIR_PATH)}.`
         });
     } else {
