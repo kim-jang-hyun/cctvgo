@@ -4,7 +4,7 @@
 
     <!-- 채널 뷰어 (드래그앤드랍 가능) -->
     <draggable
-      v-model="activeStreams"
+      v-model="cameraList"
       item-key="id"
       class="video-grid"
       :group="{ name: 'channels', pull: true, put: true }"
@@ -16,10 +16,8 @@
         <div
           v-if="!isMobile || selectedCameraChipButton?.url === element.url"
           class="video-container"
-          :class="{ 
-            highlight: selectedCameraChipButton !== null,
-            // 💡 빈 채널일 때 배경색 변경
-            'empty-channel': element.url === null 
+          :class="{
+            highlight: selectedCameraChipButton !== null
           }"
           @click="assignSelectedCameraChipButtonToCameraView(index)"
         >
@@ -112,8 +110,11 @@ const getCameraCount = async () => {
         // 2. cameraCount 개수만큼만 cameraList를 초기화
         if (count >= 0 && count <= DEFAULT_CAMERA_LIST.length) {
             // 💡 DEFAULT_CAMERA_LIST의 일부를 cameraList에 할당하여 최종 목록으로 사용
-            cameraList.value = DEFAULT_CAMERA_LIST.slice(0, count);
-            console.log(`cameraList가 ${count}개로 초기화되었습니다.`, cameraList.value);
+          for (let i = count; i < DEFAULT_CAMERA_LIST.length; ++i) {
+            cameraList.value[i].url = null;
+            cameraList.value[i].viewIndex = null;
+          }
+          console.log(`cameraList가 ${count}개로 초기화되었습니다.`, cameraList.value);
         } else {
             console.warn(`유효하지 않은 streamCount 값: ${count}. cameraList를 비웁니다.`);
             cameraList.value = [];
@@ -131,82 +132,13 @@ const getCameraCount = async () => {
 };
 
 // 카메라 리스트
-const cameraList = ref([]);
-
-const EMPTY_CAMERA = { id: 'empty', name: '빈 채널', url: null, viewIndex: null };
 const DEFAULT_CAMERA_LIST = [
- { id: 'cam1', name: 'Camera 1', url: '/hls/stream1/stream1.m3u8', viewIndex: 1 },
-  { id: 'cam2', name: 'Camera 2', url: '/hls/stream2/stream2.m3u8', viewIndex: 2 },
-  { id: 'cam3', name: 'Camera 3', url: '/hls/stream3/stream3.m3u8', viewIndex: 3 },
-  { id: 'cam4', name: 'Camera 4', url: '/hls/stream4/stream4.m3u8', viewIndex: 4 },
-  { id: 'cam5', name: 'Camera 5', url: '/hls/stream5/stream5.m3u8', viewIndex: null },
-  { id: 'cam6', name: 'Camera 6', url: '/hls/stream6/stream6.m3u8', viewIndex: null },
-  { id: 'cam7', name: 'Camera 7', url: '/hls/stream7/stream7.m3u8', viewIndex: null },
-  { id: 'cam8', name: 'Camera 8', url: '/hls/stream8/stream8.m3u8', viewIndex: null },
-  { id: 'cam9', name: 'Camera 9', url: '/hls/stream9/stream9.m3u8', viewIndex: null },
-  { id: 'cam10', name: 'Camera 10', url: '/hls/stream10/stream10.m3u8', viewIndex: null },
-  { id: 'cam11', name: 'Camera 11', url: '/hls/stream11/stream11.m3u8', viewIndex: null },
-  { id: 'cam12', name: 'Camera 12', url: '/hls/stream12/stream12.m3u8', viewIndex: null },
-  { id: 'cam13', name: 'Camera 13', url: '/hls/stream13/stream13.m3u8', viewIndex: null },
-  { id: 'cam14', name: 'Camera 14', url: '/hls/stream14/stream14.m3u8', viewIndex: null },
-  { id: 'cam15', name: 'Camera 15', url: '/hls/stream15/stream15.m3u8', viewIndex: null },
-  { id: 'cam16', name: 'Camera 16', url: '/hls/stream16/stream16.m3u8', viewIndex: null },
+ { id: 'cam1', name: 'Camera 1', url: '/hls/stream1/stream1.m3u8', viewIndex: 0 },
+  { id: 'cam2', name: 'Camera 2', url: '/hls/stream2/stream2.m3u8', viewIndex: 1 },
+  { id: 'cam3', name: 'Camera 3', url: '/hls/stream3/stream3.m3u8', viewIndex: 2 },
+  { id: 'cam4', name: 'Camera 4', url: '/hls/stream4/stream4.m3u8', viewIndex: 3 },
 ];
-
-
-// 💡 뷰에 렌더링할 최종 스트림 데이터 계산된 속성
-const activeStreams = computed({
-    // Getter: 화면에 표시할 카메라 목록을 필터링하고 정렬하여 반환
-    get() {
-        // 1. viewIndex가 있는(할당된) 카메라만 필터링하고 정렬 (할당된 카메라 최대 4개)
-        const assignedCams = cameraList.value
-            .filter(cam => cam.viewIndex !== null)
-            .sort((a, b) => a.viewIndex - b.viewIndex);
-
-        // 2. 뷰 영역을 4개로 고정하기 위해 빈 공간을 채웁니다.
-        const maxViews = 4;
-        const currentCount = assignedCams.length;
-        const remainingSlots = maxViews - currentCount;
-        
-        // 3. 빈 플레이스홀더를 생성하여 추가
-        const emptySlots = Array(remainingSlots).fill().map((_, index) => ({
-            ...EMPTY_CAMERA,
-            // 💡 드래그앤드롭을 위해 고유 ID와 viewIndex를 임시 할당
-            id: `empty-${currentCount + index + 1}`, 
-            viewIndex: currentCount + index + 1
-        }));
-        
-        // 4. 할당된 카메라와 빈 슬롯을 합쳐서 4개의 배열을 반환
-        return [...assignedCams, ...emptySlots];
-    },
-    
-    // Setter: v-model (draggable)을 통해 배열의 순서가 변경되었을 때 호출됨
-    set(newStreams) {
-        // 1. 💡 가장 먼저, cameraList에 있는 모든 카메라의 viewIndex를 초기화합니다.
-        //    (기존에 뷰에 할당되어 있었더라도 드롭 후 뷰 영역 밖으로 밀려났다면 null이 되어야 합니다.)
-        cameraList.value.forEach(cam => {
-            cam.viewIndex = null;
-        });
-
-        // 2. newStreams를 순회하며, 실제 카메라에 대해서만 새로운 viewIndex를 할당합니다.
-        newStreams.forEach((newCam, index) => {
-          // 빈 채널(플레이스홀더)은 건너뜁니다.
-            if (newCam.id.startsWith('empty')) {
-                return;
-            }
-
-            // 실제 카메라를 cameraList에서 찾아 viewIndex를 업데이트합니다.
-            const originalIndex = cameraList.value.findIndex(c => c.id === newCam.id);
-            if (originalIndex !== -1) {
-                // index는 0부터 시작, viewIndex는 1부터 시작 (현재 뷰 위치)
-                cameraList.value[originalIndex].viewIndex = index + 1;
-            }
-        });
-
-        // 2. viewIndex가 변경되면, Getter가 다시 실행되어 activeStreams가 정확히 갱신됩니다.
-        // saveConfig(); 
-    }
-});
+const cameraList = ref(DEFAULT_CAMERA_LIST);
 
 
 // 채널명 수정 관련
@@ -237,12 +169,12 @@ const initPlayers = () => {
     hlsInstances.forEach(hls => hls.destroy());
     hlsInstances.length = 0;
 
-    activeStreams.value.forEach((stream, index) => {
+    cameraList.value.forEach((stream, index) => {
         const video = videoElements[index];
         if (!video) return;
 
         // 💡 빈 채널(플레이스홀더)이면 스트림 로드를 건너뜁니다.
-        if (stream.url === null) {
+        if (stream.url === null || stream.url === undefined) {
             video.src = ''; // 비디오 소스 제거
             return;
         }
@@ -282,22 +214,15 @@ const assignSelectedCameraChipButtonToCameraView = async (index) => {
     if (!selectedCameraChipButton.value) return;
 
     // 1. 할당 해제: 현재 뷰 영역(index)에 있던 카메라의 viewIndex를 null로 설정
-    const currentCamInView = activeStreams.value[index];
-    
-    // 💡 변경: 현재 뷰 영역에 할당된 카메라가 있고, 그것이 빈 채널이 아니라면 viewIndex를 해제
-    if (currentCamInView && !currentCamInView.id.startsWith('empty')) {
-        const originalIndex = cameraList.value.findIndex(c => c.id === currentCamInView.id);
-        if (originalIndex !== -1) {
-            cameraList.value[originalIndex].viewIndex = null;
-        }
+    const prevIndex = cameraList.findIndex(c => c.viewIndex == index);
+    if (prevIndex !== -1) {
+      cameraList.value[prevIndex].viewIndex = null;
     }
 
     // 2. 새 할당: 선택된 카메라(selectedCamera)에 viewIndex를 설정
-    // 뷰 영역은 0부터 3까지 있으므로, viewIndex는 1부터 4가 됩니다.
     const selectedIndex = cameraList.value.findIndex(c => c.id === selectedCameraChipButton.value.id);
     if (selectedIndex !== -1) {
-        // 💡 viewIndex는 1부터 시작 (index + 1)
-        cameraList.value[selectedIndex].viewIndex = index + 1;
+        cameraList.value[selectedIndex].viewIndex = index;
     }
 
     selectedCameraChipButton.value = null;
