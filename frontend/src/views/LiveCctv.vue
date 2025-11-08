@@ -4,6 +4,7 @@
 
     <!-- 채널 뷰어 (드래그앤드랍 가능) -->
     <draggable
+      v-if="cameraList"
       v-model="cameraList"
       item-key="id"
       class="video-grid"
@@ -55,7 +56,7 @@
     <!-- 카메라 리스트 (칩 스타일) -->
     <div class="camera-list" @click.stop>
       <div
-        v-for="cam in cameraList"
+        v-for="cam in availableCameras"
         :key="cam.id"
         class="camera-chip"
         :class="{ selected: selectedCameraChipButton && selectedCameraChipButton.id === cam.id }"
@@ -103,43 +104,62 @@ const getCameraCount = async () => {
 
         const data = await res.json();
         
-        // 1. 성공적으로 데이터를 받으면 cameraCount 업데이트
+        // 성공적으로 데이터를 받으면 cameraCount 업데이트
         const count = Number(data.cameraCount); // 숫자로 변환
         cameraCount.value = count;
-
-        // 2. cameraCount 개수만큼만 cameraList를 초기화
-        if (count >= 0 && count <= DEFAULT_CAMERA_LIST.length) {
-            // 💡 DEFAULT_CAMERA_LIST의 일부를 cameraList에 할당하여 최종 목록으로 사용
-          for (let i = count; i < DEFAULT_CAMERA_LIST.length; ++i) {
-            cameraList.value[i].url = null;
-            cameraList.value[i].viewIndex = null;
-          }
-          console.log(`cameraList가 ${count}개로 초기화되었습니다.`, cameraList.value);
-        } else {
-            console.warn(`유효하지 않은 streamCount 값: ${count}. cameraList를 비웁니다.`);
-            cameraList.value = [];
-        }
         
     } catch (err) {
-        // 네트워크 오류 또는 throw된 오류 처리
-        console.error('API call error:', err);
-        error.value = err.message;
-        cameraCount.value = 0;
-        cameraList.value = []; // 오류 시 빈 리스트
+      // 네트워크 오류 또는 throw된 오류 처리
+      console.error('API call error:', err);
+      error.value = err.message;
+      cameraCount.value = 0;
+      cameraList.value = [];
     } finally {
         loading.value = false; // 로딩 완료
     }
 };
 
+const initCameraList = () => {
+  cameraList.value = DEFAULT_CAMERA_LIST;
+
+  if (error.value !== null) {
+    console.error('initCameraList error: ', error.value);
+    cameraList.value = [];
+    return;
+  }
+
+  if (cameraCount.value < 0 || cameraCount.value > DEFAULT_CAMERA_LIST.length) {
+    console.error('initCameraList error: ', cameraCount.value);
+    cameraList.value = [];
+    return;
+  }
+
+  for (let i = cameraCount.value; i < DEFAULT_CAMERA_LIST.length; ++i) {
+    cameraList.value[i].name = null;
+    cameraList.value[i].url = null;
+    cameraList.value[i].viewIndex = null;
+  }
+  console.log(`cameraList가 ${cameraCount.value}개로 초기화되었습니다.`, cameraList.value);
+};
+
+// URL이 있는 카메라 목록을 계산하는 computed 속성
+const availableCameras = computed(() => {
+  // cameraList가 null이거나 배열이 아니면 빈 배열 반환하여 안전하게 처리
+  if (!cameraList.value || !Array.isArray(cameraList.value)) {
+    return [];
+  }
+  // cam.url이 truthy(null, undefined, 빈 문자열 등이 아닌) 항목만 필터링
+  return cameraList.value.filter(cam => cam.url);
+});
+
 // 카메라 리스트
 const DEFAULT_CAMERA_LIST = [
- { id: 'cam1', name: 'Camera 1', url: '/hls/stream1/stream1.m3u8', viewIndex: 0 },
+  { id: 'cam1', name: 'Camera 1', url: '/hls/stream1/stream1.m3u8', viewIndex: 0 },
   { id: 'cam2', name: 'Camera 2', url: '/hls/stream2/stream2.m3u8', viewIndex: 1 },
   { id: 'cam3', name: 'Camera 3', url: '/hls/stream3/stream3.m3u8', viewIndex: 2 },
   { id: 'cam4', name: 'Camera 4', url: '/hls/stream4/stream4.m3u8', viewIndex: 3 },
 ];
-const cameraList = ref(DEFAULT_CAMERA_LIST);
-
+const cameraList = ref(null);
 
 // 채널명 수정 관련
 const editingIndex = ref(null);
@@ -214,7 +234,7 @@ const assignSelectedCameraChipButtonToCameraView = async (index) => {
     if (!selectedCameraChipButton.value) return;
 
     // 1. 할당 해제: 현재 뷰 영역(index)에 있던 카메라의 viewIndex를 null로 설정
-    const prevIndex = cameraList.findIndex(c => c.viewIndex == index);
+    const prevIndex = cameraList.value.findIndex(c => c.viewIndex == index);
     if (prevIndex !== -1) {
       cameraList.value[prevIndex].viewIndex = null;
     }
@@ -258,6 +278,7 @@ const onKeyDown = (e) => {
 
 onMounted(async () => {
   await getCameraCount();
+  initCameraList();
   await nextTick();
 
   initPlayers();
