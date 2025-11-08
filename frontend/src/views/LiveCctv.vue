@@ -8,34 +8,17 @@
       v-model="cameraList"
       item-key="id"
       class="video-grid"
-      :group="{ name: 'channels', pull: true, put: true }"
-      @end="onDragEnd"
-      @click.stop
+      :sort="false"
     >
       <template #item="{ element, index }">
         <!-- 모바일에서는 선택된 채널만 표시 -->
         <div
-          v-if="!isMobile || selectedCameraChipButton?.url === element.url"
+          v-if="!isMobile"
           class="video-container"
-          :class="{
-            highlight: selectedCameraChipButton !== null
-          }"
-          @click="assignSelectedCameraChipButtonToCameraView(index)"
         >
-          <!-- 채널명 표시 및 수정 -->
-          <div class="video-label" @click.stop="startEditing(index, element.name)">
-            <template v-if="editingIndex === index  && element.url !== null">
-              <input
-                v-model="editedName"
-                @blur="finishEditing(index)"
-                @keyup.enter="finishEditing(index)"
-                class="video-name-input"
-                autofocus
-              />
-            </template>
-            <template v-else>
-              {{ element.name }}
-            </template>
+          <!-- 채널명 표시 -->
+          <div class="video-label">
+            {{ element.name }}
           </div>
 
           <!-- 비디오 -->
@@ -52,27 +35,7 @@
         </div>
       </template>
     </draggable>
-
-    <!-- 카메라 리스트 (칩 스타일) -->
-    <div class="camera-list" @click.stop>
-      <div
-        v-for="cam in availableCameras"
-        :key="cam.id"
-        class="camera-chip"
-        :class="{ selected: selectedCameraChipButton && selectedCameraChipButton.id === cam.id }"
-        @click="selectCameraChipButton(cam)"
-      >
-        {{ cam.name }}
-      </div>
-    </div>
   </div>
-
-  <!-- 하단 메시지 -->
-  <transition name="fade">
-    <div v-if="showMessage" class="assign-message">
-      영상을 표시할 영역을 선택해 주세요.
-    </div>
-  </transition>
 </template>
 
 <script setup>
@@ -142,16 +105,6 @@ const initCameraList = () => {
   console.log(`cameraList가 ${cameraCount.value}개로 초기화되었습니다.`, cameraList.value);
 };
 
-// URL이 있는 카메라 목록을 계산하는 computed 속성
-const availableCameras = computed(() => {
-  // cameraList가 null이거나 배열이 아니면 빈 배열 반환하여 안전하게 처리
-  if (!cameraList.value || !Array.isArray(cameraList.value)) {
-    return [];
-  }
-  // cam.url이 truthy(null, undefined, 빈 문자열 등이 아닌) 항목만 필터링
-  return cameraList.value.filter(cam => cam.url);
-});
-
 // 카메라 리스트
 const DEFAULT_CAMERA_LIST = [
   { id: 'cam1', name: 'Camera 1', url: '/hls/stream1/stream1.m3u8', viewIndex: 0 },
@@ -160,17 +113,6 @@ const DEFAULT_CAMERA_LIST = [
   { id: 'cam4', name: 'Camera 4', url: '/hls/stream4/stream4.m3u8', viewIndex: 3 },
 ];
 const cameraList = ref(null);
-
-// 채널명 수정 관련
-const editingIndex = ref(null);
-const editedName = ref('');
-
-// 선택된 카메라
-const selectedCameraChipButton = ref(null);
-
-// 하단 메시지 표시 여부
-const showMessage = ref(false);
-let messageTimeout = null;
 
 // 모바일 여부 체크
 const isMobile = ref(false);
@@ -212,70 +154,6 @@ const initPlayers = () => {
     });
 };
 
-// 칩 선택
-const selectCameraChipButton = (cam) => {
-  if (selectedCameraChipButton.value && selectedCameraChipButton.value.id === cam.id) {
-    // 선택된 칩 다시 클릭 시 선택 취소
-    selectedCameraChipButton.value = null;
-    showMessage.value = false;
-    if (messageTimeout) clearTimeout(messageTimeout);
-  } else {
-    selectedCameraChipButton.value = cam;
-    showMessage.value = true;
-    if (messageTimeout) clearTimeout(messageTimeout);
-    messageTimeout = setTimeout(() => {
-      showMessage.value = false;
-    }, 3000);
-  }
-};
-
-// 선택된 카메라를 영상뷰에 할당
-const assignSelectedCameraChipButtonToCameraView = async (index) => {
-    if (!selectedCameraChipButton.value) return;
-
-    // 1. 할당 해제: 현재 뷰 영역(index)에 있던 카메라의 viewIndex를 null로 설정
-    const prevIndex = cameraList.value.findIndex(c => c.viewIndex == index);
-    if (prevIndex !== -1) {
-      cameraList.value[prevIndex].viewIndex = null;
-    }
-
-    // 2. 새 할당: 선택된 카메라(selectedCamera)에 viewIndex를 설정
-    const selectedIndex = cameraList.value.findIndex(c => c.id === selectedCameraChipButton.value.id);
-    if (selectedIndex !== -1) {
-        cameraList.value[selectedIndex].viewIndex = index;
-    }
-
-    selectedCameraChipButton.value = null;
-
-    await nextTick();
-    initPlayers();
-    // saveConfig();
-};
-
-// 드래그&드롭 종료 후 플레이어 초기화
-const onDragEnd = async () => {
-  await nextTick();
-  initPlayers();
-};
-
-// 빈 영역 클릭 시 선택 취소
-const onPageClick = () => {
-  if (selectedCameraChipButton.value) {
-    selectedCameraChipButton.value = null;
-    showMessage.value = false;
-    if (messageTimeout) clearTimeout(messageTimeout);
-  }
-};
-
-// ESC 키 눌렀을 때 선택 취소
-const onKeyDown = (e) => {
-  if (e.key === 'Escape' && selectedCameraChipButton.value) {
-    selectedCameraChipButton.value = null;
-    showMessage.value = false;
-    if (messageTimeout) clearTimeout(messageTimeout);
-  }
-};
-
 onMounted(async () => {
   await getCameraCount();
   initCameraList();
@@ -285,19 +163,12 @@ onMounted(async () => {
   checkMobile();
   setVH();
 
-  // 모바일일 때 selectedCamera가 없으면 첫 번째 채널 선택 (cameraList를 사용)
-  if (isMobile.value && !selectedCameraChipButton.value && cameraList.value.length > 0) {
-      selectedCameraChipButton.value = cameraList.value[0];
-  }
-
-  window.addEventListener('keydown', onKeyDown);
   window.addEventListener('resize', checkMobile);
   window.addEventListener("resize", setVH);
 });
 
 
 onBeforeUnmount(() => {
-  window.removeEventListener('keydown', onKeyDown);
   window.removeEventListener('resize', checkMobile);
   window.removeEventListener("resize", setVH);
 });
@@ -310,28 +181,6 @@ function setVH() {
   }
 }
 
-// 채널명 수정 시작
-function startEditing(index, currentName) {
-  editingIndex.value = index;
-  editedName.value = currentName;
-}
-
-// 채널명 수정 완료
-function finishEditing(index) {
-  if (editedName.value.trim() !== '') {
-    // 1. 현재 activeStreams에서 변경 대상 카메라 ID를 가져옴
-    const targetId = activeStreams.value[index].id;
-    
-    // 2. cameraList에서 해당 ID를 가진 원본 카메라의 name 필드를 수정
-    const originalIndex = cameraList.value.findIndex(c => c.id === targetId);
-    if (originalIndex !== -1) {
-      // 💡 name 필드를 직접 사용자 지정 이름으로 사용
-      cameraList.value[originalIndex].name = editedName.value.trim();
-      // saveConfig(); // 백엔드 저장 로직 추가 위치
-    }
-  }
-  editingIndex.value = null;
-}
 </script>
 
 <style scoped>
@@ -340,7 +189,7 @@ function finishEditing(index) {
   width: 100%;
   height: 100dvh;
   margin: 0;
-  padding: 0 0 16px 0; /* 아래 칩 버튼 여백 포함 */
+  padding: 0 0 0 0; /* 아래 칩 버튼 여백 포함 */
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -355,36 +204,6 @@ h2 {
   white-space: nowrap;
   overflow: visible;
   text-align: center;
-}
-
-/* 카메라 칩 리스트 */
-.camera-list {
-  display: flex;
-  margin-top: 10px;
-  gap: 8px;
-  justify-content: center;
-  flex-wrap: wrap;
-  user-select: none;
-}
-
-/* 각 카메라 칩 스타일 */
-.camera-chip {
-  background: #eee;
-  padding: 6px 10px;
-  border-radius: 16px;
-  cursor: pointer;
-  font-size: 14px;
-  transition: background 0.2s, border-color 0.2s;
-  border: 2px solid transparent;
-}
-
-.camera-chip:hover {
-  background: #ccc;
-}
-
-.camera-chip.selected {
-  border-color: #007bff;
-  background: #cce5ff;
 }
 
 /* CCTV 영상 4분할 그리드 */
@@ -441,31 +260,6 @@ h2 {
   cursor: pointer;
 }
 
-/* 채널명 수정 input */
-.video-name-input {
-  font-size: 12px;
-  padding: 2px 4px;
-  border: none;
-  border-radius: 4px;
-}
-
-/* 할당 메시지 */
-.assign-message {
-  position: fixed;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(0,123,255,0.85);
-  color: white;
-  padding: 10px 20px;
-  border-radius: 20px;
-  font-weight: 600;
-  box-shadow: 0 0 10px rgba(0,123,255,0.6);
-  user-select: none;
-  pointer-events: none;
-  z-index: 9999;
-}
-
 /* fade transition 효과 */
 .fade-enter-active,
 .fade-leave-active {
@@ -475,21 +269,6 @@ h2 {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
-}
-
-/* 💡 빈 채널 스타일 추가 */
-.video-container.empty-channel {
-    background: #2c3e50; /* 어두운 색상 */
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-/* 빈 채널일 때 레이블 색상 조정 */
-.video-container.empty-channel .video-label {
-    background: rgba(0, 0, 0, 0.4);
-    color: #ccc;
-    cursor: default;
 }
 
 /* 모바일에서 1채널만 보여주기 */
