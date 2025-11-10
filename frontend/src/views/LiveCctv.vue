@@ -44,46 +44,57 @@ import Hls from 'hls.js';
 import draggable from 'vuedraggable';
 
 // 상태 변수 정의
-const GET_CAMERA_COUNT_API_URL = '/api/get-stream-count';
-const cameraCount = ref(0);
 const loading = ref(true);
 const error = ref(null);
 
 /**
- * 백엔드에서 카메라 개수를 가져오는 비동기 함수
+ * 백엔드에서 카메라 리스트를 가져오는 비동기 함수
  */
-const getCameraCount = async () => {
+const getCameraList = async () => {
     loading.value = true; // 로딩 시작
     error.value = null;   // 에러 초기화
+    
+    const API_URL = '/api/get-channel-list'; 
 
     try {
-        const res = await fetch(GET_CAMERA_COUNT_API_URL);
+        // 1. await fetch()로 응답 객체를 바로 받습니다.
+        const response = await fetch(API_URL);
+
+        // 2. HTTP 4xx, 5xx 에러 처리
+        if (!response.ok) {
+            // 서버에서 에러 메시지를 JSON 형태로 보냈을 경우 처리
+            const errorData = await response.json().catch(() => ({ message: response.statusText }));
+            // 오류를 throw하여 catch 블록으로 이동
+            throw new Error(errorData.message || `Failed to get: ${response.status}`);
+        }
         
-        if (!res.ok) {
-            // HTTP 4xx, 5xx 에러 처리
-            const errorData = await res.json();
-            throw new Error(errorData.message || `Failed to get: ${res.status} ${res.statusText}`);
+        // 3. 응답 데이터를 JSON으로 파싱
+        const data = await response.json();
+
+        // 4. 백엔드의 status 필드 확인 (선택적)
+        if (data.status !== 'success') {
+            throw new Error(data.message || 'API responded with non-success status.');
         }
 
-        const data = await res.json();
-        
-        // 성공적으로 데이터를 받으면 cameraCount 업데이트
-        const count = Number(data.cameraCount); // 숫자로 변환
-        cameraCount.value = count;
-        
-    } catch (err) {
-      // 네트워크 오류 또는 throw된 오류 처리
-      console.error('API call error:', err);
-      error.value = err.message;
-      cameraCount.value = 0;
-      cameraList.value = [];
+        // 5. 성공적으로 데이터를 받으면 Vue Ref 업데이트
+        console.log('채널 리스트:', data.channelList); // ex) ['거실', '안방']
+
+        // 새로운 cameraList.value에 데이터 저장
+        cameraNameList.value = data.channelList || []; 
+
+      } catch (err) {
+        // 네트워크 오류 또는 throw된 오류 처리
+        console.error('API call error:', err.message);
+        error.value = err.message;
+        cameraList.value = []; // 오류 시 리스트 초기화
     } finally {
         loading.value = false; // 로딩 완료
     }
 };
 
 const initCameraList = () => {
-  cameraList.value = DEFAULT_CAMERA_LIST;
+  const cameraCount = cameraNameList.value.length;
+  cameraList.value = JSON.parse(JSON.stringify(DEFAULT_CAMERA_LIST));
 
   if (error.value !== null) {
     console.error('initCameraList error: ', error.value);
@@ -91,18 +102,25 @@ const initCameraList = () => {
     return;
   }
 
-  if (cameraCount.value < 0 || cameraCount.value > DEFAULT_CAMERA_LIST.length) {
-    console.error('initCameraList error: ', cameraCount.value);
+  if (cameraCount > DEFAULT_CAMERA_LIST.length) {
+    console.error('initCameraList error: ', cameraCount);
     cameraList.value = [];
     return;
   }
 
-  for (let i = cameraCount.value; i < DEFAULT_CAMERA_LIST.length; ++i) {
-    cameraList.value[i].name = null;
-    cameraList.value[i].url = null;
-    cameraList.value[i].viewIndex = null;
+  for (let i = 0; i < DEFAULT_CAMERA_LIST.length; ++i) {
+
+    let isValidCamera = (i < cameraCount);
+    if (isValidCamera) {
+      cameraList.value[i].name = cameraNameList.value[i];
+    }
+    else {
+      cameraList.value[i].name = null;
+      cameraList.value[i].url = null;
+      cameraList.value[i].viewIndex = null;
+    }
   }
-  console.log(`cameraList가 ${cameraCount.value}개로 초기화되었습니다.`, cameraList.value);
+  console.log(`cameraList가 ${cameraCount}개로 초기화되었습니다.`, cameraList.value);
 };
 
 // 카메라 리스트
@@ -113,6 +131,7 @@ const DEFAULT_CAMERA_LIST = [
   { id: 'cam4', name: 'Camera 4', url: '/hls/stream4/stream4.m3u8', viewIndex: 3 },
 ];
 const cameraList = ref(null);
+const cameraNameList = ref([]);
 
 // 모바일 여부 체크
 const isMobile = ref(false);
@@ -155,7 +174,7 @@ const initPlayers = () => {
 };
 
 onMounted(async () => {
-  await getCameraCount();
+  await getCameraList();
   initCameraList();
   await nextTick();
 

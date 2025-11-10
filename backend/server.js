@@ -24,6 +24,7 @@ app.use(session({
 
 const CONFIG_PATH = path.join(__dirname, 'config.json');
 const HLS_DIR_PATH = path.join(__dirname, '..', 'hls');
+const CCTV_CONFIG_PATH = path.join(__dirname, '..', 'cctv.txt');
 
 /**
  * HLS 폴더 내의 하위 폴더(스트림) 개수를 세는 함수
@@ -43,6 +44,46 @@ function countStreamFolders() {
         console.error('Error reading HLS directory:', error.message);
         // 에러 코드 500과 함께 에러 메시지를 반환합니다.
         return { success: false, error: 'Failed to read HLS stream directory.', details: error.message };
+    }
+}
+
+/**
+ * cctv.txt 파일에서 카메라 주소와 이름 목록을 읽어와 파싱하는 함수
+ * @returns {object} { success: boolean, data: Array<string>, error?: string }
+ */
+function readCCTVConfig() {
+    try {
+        if (!fs.existsSync(CCTV_CONFIG_PATH)) {
+            return { success: false, error: 'cctv.txt file not found.' };
+        }
+
+        const fileContent = fs.readFileSync(CCTV_CONFIG_PATH, 'utf8');
+        const lines = fileContent.split('\n');
+        const channelList = [];
+
+        for (const line of lines) {
+            const trimmedLine = line.trim();
+
+            // 1. 주석 무시 (#으로 시작)
+            if (trimmedLine.startsWith('#') || trimmedLine === '') {
+                continue;
+            }
+
+            // 2. 콤마로 분리하여 이름 추출 (주소, 이름)
+            const parts = trimmedLine.split(',');
+            if (parts.length >= 2) {
+                // 두 번째 요소(카메라 이름)를 트림하여 리스트에 추가
+                const channelName = parts[1].trim();
+                if (channelName) {
+                    channelList.push(channelName);
+                }
+            }
+        }
+
+        return { success: true, data: channelList };
+    } catch (error) {
+        console.error('Error reading CCTV config file:', error.message);
+        return { success: false, error: 'Failed to read and parse cctv.txt.', details: error.message };
     }
 }
 
@@ -76,6 +117,30 @@ app.get('/api/get-stream-count', (req, res) => {
         });
     } else {
         // 에러가 발생했을 경우 (예: 폴더를 찾지 못함)
+        res.status(500).json({
+            status: 'error',
+            message: result.error,
+            details: result.details
+        });
+    }
+});
+
+/**
+ * 💡 cctv.txt 파일에서 카메라(채널) 이름 목록을 응답하는 API 엔드포인트
+ * GET /api/get-channel-list
+ */
+app.get('/api/get-channel-list', authMiddleware, (req, res) => {
+    const result = readCCTVConfig();
+
+    if (result.success) {
+        // 성공적으로 리스트를 읽었을 경우
+        res.json({
+            status: 'success',
+            channelList: result.data,
+            message: `Successfully read ${result.data.length} channels.`
+        });
+    } else {
+        // 에러가 발생했을 경우
         res.status(500).json({
             status: 'error',
             message: result.error,

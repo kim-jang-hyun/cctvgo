@@ -1,4 +1,7 @@
 # 주석은 #으로 시작하며 무시됩니다.
 
-rtsp://localhost:8554/cctvgo
-rtsp://localhost:8555/cctvgo1
+# 양식 : 카메라주소, 카메라이름
+# ex) rtsp://localhost:8554/cctvgo, 거실
+
+rtsp://localhost:8554/cctvgo, 거실
+rtsp://localhost:8555/cctvgo1, 안방
