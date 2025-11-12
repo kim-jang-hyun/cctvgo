@@ -23,29 +23,8 @@ app.use(session({
 }));
 
 const CONFIG_PATH = path.join(__dirname, 'config.json');
-const HLS_DIR_PATH = path.join(__dirname, '..', 'hls');
 const CCTV_CONFIG_PATH = path.join(__dirname, '..', 'cctv.txt');
 
-/**
- * HLS 폴더 내의 하위 폴더(스트림) 개수를 세는 함수
- * fs.readdirSync를 사용하여 동기적으로 처리합니다.
- */
-function countStreamFolders() {
-    try {
-        // 1. HLS 디렉토리의 모든 파일 및 폴더 목록을 읽습니다.
-        const items = fs.readdirSync(HLS_DIR_PATH, { withFileTypes: true });
-
-        // 2. 목록 중에서 디렉토리(폴더)만 필터링하고 개수를 셉니다.
-        const folderCount = items.filter(item => item.isDirectory()).length;
-
-        return { success: true, count: folderCount };
-    } catch (error) {
-        // 3. 디렉토리가 없거나 접근 권한 등의 오류가 발생했을 때 처리합니다.
-        console.error('Error reading HLS directory:', error.message);
-        // 에러 코드 500과 함께 에러 메시지를 반환합니다.
-        return { success: false, error: 'Failed to read HLS stream directory.', details: error.message };
-    }
-}
 
 /**
  * cctv.txt 파일에서 카메라 주소와 이름 목록을 읽어와 파싱하는 함수
@@ -99,30 +78,6 @@ app.post('/login', (req, res) => {
   } else {
     return res.status(401).send('비밀번호가 틀렸습니다.');
   }
-});
-
-/**
- * 스트림 폴더 개수를 응답하는 API 엔드포인트
- * GET /api/get-camera-count
- */
-app.get('/api/get-stream-count', (req, res) => {
-    const result = countStreamFolders();
-
-    if (result.success) {
-        // 성공적으로 개수를 세었을 경우
-        res.json({
-            status: 'success',
-            cameraCount: result.count,
-            message: `Found ${result.count} stream folders in ${path.basename(HLS_DIR_PATH)}.`
-        });
-    } else {
-        // 에러가 발생했을 경우 (예: 폴더를 찾지 못함)
-        res.status(500).json({
-            status: 'error',
-            message: result.error,
-            details: result.details
-        });
-    }
 });
 
 /**

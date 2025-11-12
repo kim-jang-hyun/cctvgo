@@ -39,7 +39,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, nextTick, onBeforeUnmount, computed } from 'vue';
+import { ref, reactive, onMounted, nextTick, onBeforeUnmount } from 'vue';
 import Hls from 'hls.js';
 import draggable from 'vuedraggable';
 
@@ -49,12 +49,14 @@ const error = ref(null);
 
 /**
  * 백엔드에서 카메라 리스트를 가져오는 비동기 함수
+ * @returns {Array<string>} 카메라 이름 목록
  */
 const getCameraList = async () => {
+    const API_URL = '/api/get-channel-list'; 
+    let channelList = []; // 로컬 변수 선언
+
     loading.value = true; // 로딩 시작
     error.value = null;   // 에러 초기화
-    
-    const API_URL = '/api/get-channel-list'; 
 
     try {
         // 1. await fetch()로 응답 객체를 바로 받습니다.
@@ -76,24 +78,28 @@ const getCameraList = async () => {
             throw new Error(data.message || 'API responded with non-success status.');
         }
 
-        // 5. 성공적으로 데이터를 받으면 Vue Ref 업데이트
+        // 5. 성공적으로 데이터를 받으면 channelList 업데이트
         console.log('채널 리스트:', data.channelList); // ex) ['거실', '안방']
-
-        // 새로운 cameraList.value에 데이터 저장
-        cameraNameList.value = data.channelList || []; 
+        channelList = data.channelList || []; 
 
       } catch (err) {
         // 네트워크 오류 또는 throw된 오류 처리
         console.error('API call error:', err.message);
         error.value = err.message;
-        cameraList.value = []; // 오류 시 리스트 초기화
-    } finally {
+        // 오류 발생 시 빈 배열 반환
+        channelList = []; 
+      } finally {
         loading.value = false; // 로딩 완료
     }
+
+    return channelList; // 로컬 변수 반환
 };
 
-const initCameraList = () => {
-  const cameraCount = cameraNameList.value.length;
+/**
+ * @param {Array<string>} cameraNameList - 백엔드에서 받아온 카메라 이름 목록
+ */
+const initCameraList = (cameraNameList) => {
+  const cameraCount = cameraNameList.length;
   cameraList.value = JSON.parse(JSON.stringify(DEFAULT_CAMERA_LIST));
 
   if (error.value !== null) {
@@ -112,7 +118,7 @@ const initCameraList = () => {
 
     let isValidCamera = (i < cameraCount);
     if (isValidCamera) {
-      cameraList.value[i].name = cameraNameList.value[i];
+      cameraList.value[i].name = cameraNameList[i];
     }
     else {
       cameraList.value[i].name = null;
@@ -131,7 +137,6 @@ const DEFAULT_CAMERA_LIST = [
   { id: 'cam4', name: 'Camera 4', url: '/hls/stream4/stream4.m3u8', viewIndex: 3 },
 ];
 const cameraList = ref(null);
-const cameraNameList = ref([]);
 
 // 모바일 여부 체크
 const isMobile = ref(false);
@@ -174,8 +179,9 @@ const initPlayers = () => {
 };
 
 onMounted(async () => {
-  await getCameraList();
-  initCameraList();
+  const cameraNameList = await getCameraList();
+  initCameraList(cameraNameList);
+
   await nextTick();
 
   initPlayers();
