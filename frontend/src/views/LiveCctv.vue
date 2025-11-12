@@ -13,7 +13,6 @@
       <template #item="{ element, index }">
         <!-- 모바일에서는 선택된 채널만 표시 -->
         <div
-          v-if="!isMobile"
           class="video-container"
         >
           <!-- 채널명 표시 -->
@@ -39,7 +38,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, nextTick, onBeforeUnmount } from 'vue';
+import { ref, reactive, onMounted, nextTick } from 'vue';
 import Hls from 'hls.js';
 import draggable from 'vuedraggable';
 
@@ -138,17 +137,9 @@ const DEFAULT_CAMERA_LIST = [
 ];
 const cameraList = ref(null);
 
-// 모바일 여부 체크
-const isMobile = ref(false);
-
 // HLS 인스턴스와 비디오 태그 ref
 const hlsInstances = [];
 const videoElements = reactive([]);
-
-// 모바일 여부 감지
-const checkMobile = () => {
-  isMobile.value = window.innerWidth <= 768;
-};
 
 // HLS 플레이어 초기화
 const initPlayers = () => {
@@ -183,29 +174,8 @@ onMounted(async () => {
   initCameraList(cameraNameList);
 
   await nextTick();
-
   initPlayers();
-  checkMobile();
-  setVH();
-
-  window.addEventListener('resize', checkMobile);
-  window.addEventListener("resize", setVH);
 });
-
-
-onBeforeUnmount(() => {
-  window.removeEventListener('resize', checkMobile);
-  window.removeEventListener("resize", setVH);
-});
-
-function setVH() {
-  // 모바일일 때만 적용
-  if (isMobile) {
-    const vh = (window.innerHeight) * 0.01;
-    document.documentElement.style.setProperty("--vh", `${vh}px`);
-  }
-}
-
 </script>
 
 <style scoped>
@@ -294,17 +264,6 @@ h2 {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
-}
-
-/* 모바일에서 1채널만 보여주기 */
-@media (max-width: 768px) {
-  .video-grid {
-    height: calc(var(--vh, 1vh) * 100); /* 100배 곱해줘야 100vh */
-
-    grid-template-columns: 1fr !important;
-    grid-template-rows: 1fr !important;
-    gap: 0 !important;
-  }
 }
 
 </style>
