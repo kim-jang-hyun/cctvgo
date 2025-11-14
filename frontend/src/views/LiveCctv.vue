@@ -184,7 +184,7 @@ onMounted(async () => {
   width: 100%;
   height: 100dvh;
   margin: 0;
-  padding: 0 0 0 0; /* 아래 칩 버튼 여백 포함 */
+  padding: 5px;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
