@@ -50,23 +50,18 @@ echo [ERROR] config.json not found. Aborting script.
 exit /b 1
 )
 
-:: D. CCTV 목록 파일 (cctv.txt) 복사 (ROOT 폴더에서 package로)
-if exist "cctv.txt" (
-copy "cctv.txt" "%PACKAGE_DIR%" /Y
+:: D. CCTV 목록 파일 (cctv.txt) 복사 (backend 폴더에서 package로)
+if exist "%BACKEND_DIR%\cctv.txt" (
+copy "%BACKEND_DIR%\cctv.txt" "%PACKAGE_DIR%" /Y
 echo [INFO] Copied cctv.txt
 ) else (
 echo [ERROR] cctv.txt not found. Aborting script.
 exit /b 1
 )
 
-:: E. HLS 스트리밍 폴더 복사
-if exist "hls" (
-xcopy "hls" "%PACKAGE_DIR%\hls" /E /I /Y
-echo [INFO] Copied hls folder
-) else (
-echo [ERROR] hls folder not found. Aborting script.
-exit /b 1
-)
+:: E. HLS 스트리밍 폴더 생성
+mkdir "%PACKAGE_DIR%\hls"
+echo [INFO] hls folder created.
 
 :: ---------------------------------------------
 :: 3. 프론트엔드 빌드 (frontend/dist 생성)

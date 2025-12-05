@@ -3,8 +3,35 @@ const session = require('express-session');
 const fs = require('fs');
 const path = require('path');
 
+let BASE_DIR;
+let HLS_STATIC_PATH;
+let FRONTEND_DIST_STATIC_PATH;
+
+if (process.pkg) {
+    // process.pkg가 존재하면 -> PKG로 빌드된 실행 파일 환경
+    // 실행 파일이 위치한 디렉토리 (예: C:\cctvgo\package)
+    const EXEC_PATH = path.dirname(process.execPath);
+    BASE_DIR = EXEC_PATH;
+    HLS_STATIC_PATH = path.join(BASE_DIR, 'hls');
+    FRONTEND_DIST_STATIC_PATH = path.join(BASE_DIR, 'frontend/dist');
+
+    console.log(`[INFO] PKG Environment Detected. Base Path: ${BASE_DIR}`);
+    console.log(`[HLS PATH] PKG 환경: ${HLS_STATIC_PATH}`);
+    console.log(`[FRONTEND_DIST_STATIC_PATH] PKG 환경: ${FRONTEND_DIST_STATIC_PATH}`);
+} else {
+    // process.pkg가 없으면 -> 개발 환경 (일반 Node 실행)
+    // __dirname은 현재 server.js 파일이 있는 디렉토리 (C:\cctvgo\backend)
+    BASE_DIR = __dirname;
+    HLS_STATIC_PATH = path.join(BASE_DIR, '..', 'hls');
+    FRONTEND_DIST_STATIC_PATH = path.join(BASE_DIR, '..', 'frontend/dist');
+
+    console.log(`[INFO] Development Environment Detected. Base Path: ${BASE_DIR}`);
+    console.log(`[HLS PATH] 개발 환경: ${HLS_STATIC_PATH}`);
+    console.log(`[FRONTEND_DIST_STATIC_PATH] 개발 환경: ${FRONTEND_DIST_STATIC_PATH}`);
+}
+
 const dotenv = require('dotenv');
-dotenv.config(); // .env 파일에서 환경 변수 로드
+dotenv.config({ path: path.join(BASE_DIR, '.env') });   // .env 파일에서 환경 변수 로드
 
 const app = express();
 const PORT = 8085;
@@ -22,9 +49,8 @@ app.use(session({
     maxAge: 1000 * 60 * 60 * 1 }  // 1시간
 }));
 
-const CONFIG_PATH = path.join(__dirname, 'config.json');
-const CCTV_CONFIG_PATH = path.join(__dirname, '..', 'cctv.txt');
-
+const CONFIG_PATH = path.join(BASE_DIR, 'config.json');
+const CCTV_CONFIG_PATH = path.join(BASE_DIR, 'cctv.txt');
 
 /**
  * cctv.txt 파일에서 카메라 주소와 이름 목록을 읽어와 파싱하는 함수
@@ -119,8 +145,9 @@ function authMiddleware(req, res, next) {
   res.redirect('/login');
 }
 
+
 // HLS 정적 파일 제공 (인증 필요)
-app.use('/hls', authMiddleware, express.static(path.join(__dirname, '../hls')));
+app.use('/hls', authMiddleware, express.static(HLS_STATIC_PATH));
 
 // 정적 파일 제공 - /login 경로는 제외하고 인증 미들웨어 적용
 app.use((req, res, next) => {
@@ -130,13 +157,13 @@ app.use((req, res, next) => {
   }
   // /login 이외는 인증 후 정적 파일 제공
   authMiddleware(req, res, () => {
-    express.static(path.join(__dirname, '../frontend/dist'))(req, res, next);
+    express.static(FRONTEND_DIST_STATIC_PATH)(req, res, next);
   });
 });
 
 // Vue 라우터 대응용 fallback - SPA 라우팅 처리
 app.get('*', authMiddleware, (req, res) => {
-  res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
+  res.sendFile(path.join(FRONTEND_DIST_STATIC_PATH, 'index.html'));
 });
 
 app.listen(PORT, () => {
