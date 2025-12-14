@@ -13,6 +13,7 @@ set "ROOT_DIR=%~dp0"
 set "PACKAGE_DIR=%ROOT_DIR%package"
 set "BACKEND_DIR=%ROOT_DIR%backend"
 set "FFMPEG_DIR=%ROOT_DIR%ffmpeg"
+set "CLOUDFLARE_DIR=%ROOT_DIR%cloudflare"
 
 :: ---------------------------------------------
 :: 2. 외부 파일 복사
@@ -83,10 +84,32 @@ echo [ERROR] run_single_stream.bat not found. Aborting script.
 exit /b 1
 )
 
-
 :: F. HLS 스트리밍 폴더 생성
 mkdir "%PACKAGE_DIR%\hls"
 echo [INFO] hls folder created.
+
+:: G. cloudflare 터널생성
+echo ---------------------------------------------
+echo [INFO] Creating Cloudflare Tunnel
+
+:: **변경:** CUSTOMER_ID 입력을 make_package.bat에서 받습니다.
+set /p CUSTOMER_ID=고객 ID (예: user1):
+
+cd %CLOUDFLARE_DIR%
+:: **변경:** CUSTOMER_ID를 인수로 전달합니다.
+call make_cloudflare_package.bat %CUSTOMER_ID%
+echo [INFO] Customer ID set in make_package.bat: %CUSTOMER_ID%
+cd %ROOT_DIR%
+
+:: H. cloudflare 복사
+if exist "%CLOUDFLARE_DIR%" (
+xcopy "%CLOUDFLARE_DIR%\%CUSTOMER_ID%" "%PACKAGE_DIR%\cloudflare" /E /I /Y
+echo [INFO] Copied cloudflare folder
+) else (
+echo [ERROR] cloudflare folder not found. Aborting script.
+exit /b 1
+)
+
 
 :: ---------------------------------------------
 :: 3. 프론트엔드 빌드 (frontend/dist 생성)

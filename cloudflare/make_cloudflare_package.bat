@@ -4,14 +4,16 @@ setlocal enabledelayedexpansion
 chcp 65001
 
 :: 사용자 입력
-set /p CUSTOMER_ID=고객 ID (예: user1):
+set CUSTOMER_ID=%~1
 set DOMAIN=cctvgo.app
 set PORT=8085
+
+echo [INFO] Received Customer ID: %CUSTOMER_ID%
 
 :: 변수 설정
 set TUNNEL_NAME=tunnel_%CUSTOMER_ID%
 set HOSTNAME=%CUSTOMER_ID%.%DOMAIN%
-set OUTPUT_DIR=customer_%CUSTOMER_ID%
+set OUTPUT_DIR=%CUSTOMER_ID%
 set ZIP_FILE=%OUTPUT_DIR%.zip
 
 
@@ -86,4 +88,3 @@ powershell -Command "Compress-Archive -Path '%OUTPUT_DIR%\*' -DestinationPath '%
 
 echo.
 echo ✅ 완료: %ZIP_FILE% 생성됨!
-pause
