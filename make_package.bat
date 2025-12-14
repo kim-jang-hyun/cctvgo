@@ -12,6 +12,7 @@ echo ---------------------------------------------
 set "ROOT_DIR=%~dp0"
 set "PACKAGE_DIR=%ROOT_DIR%package"
 set "BACKEND_DIR=%ROOT_DIR%backend"
+set "FFMPEG_DIR=%ROOT_DIR%ffmpeg"
 
 :: ---------------------------------------------
 :: 2. 외부 파일 복사
@@ -59,7 +60,31 @@ echo [ERROR] cctv.txt not found. Aborting script.
 exit /b 1
 )
 
-:: E. HLS 스트리밍 폴더 생성
+:: E. ffmpeg 복사
+if exist "%FFMPEG_DIR%" (
+xcopy "%FFMPEG_DIR%" "%PACKAGE_DIR%\ffmpeg" /E /I /Y
+echo [INFO] Copied ffmpeg folder
+) else (
+echo [ERROR] ffmpeg folder not found. Aborting script.
+exit /b 1
+)
+if exist "%ROOT_DIR%\start_ffmpeg.bat" (
+copy "%ROOT_DIR%\start_ffmpeg.bat" "%PACKAGE_DIR%" /Y
+echo [INFO] Copied start_ffmpeg.bat
+) else (
+echo [ERROR] start_ffmpeg.bat not found. Aborting script.
+exit /b 1
+)
+if exist "%ROOT_DIR%\run_single_stream.bat" (
+copy "%ROOT_DIR%\run_single_stream.bat" "%PACKAGE_DIR%" /Y
+echo [INFO] Copied run_single_stream.bat
+) else (
+echo [ERROR] run_single_stream.bat not found. Aborting script.
+exit /b 1
+)
+
+
+:: F. HLS 스트리밍 폴더 생성
 mkdir "%PACKAGE_DIR%\hls"
 echo [INFO] hls folder created.
 

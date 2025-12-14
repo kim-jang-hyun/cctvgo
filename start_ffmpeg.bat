@@ -8,7 +8,7 @@ setlocal enabledelayedexpansion
 
 :: 사용자 설정값
 set RETRY_DELAY=5
-set STREAM_CONFIG_FILE=backend\cctv.txt
+set STREAM_CONFIG_FILE=cctv.txt
 set SINGLE_STREAM_SCRIPT=run_single_stream.bat
 set BASE_DIR=hls
 
