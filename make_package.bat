@@ -2,9 +2,7 @@
 chcp 65001 > nul
 setlocal enabledelayedexpansion
 
-:: ---------------------------------------------
 :: 1. 변수 설정 및 초기화
-:: ---------------------------------------------
 echo ---------------------------------------------
 echo [INFO] Package Directory Initialization
 echo ---------------------------------------------
@@ -15,11 +13,7 @@ set "BACKEND_DIR=%ROOT_DIR%backend"
 set "FFMPEG_DIR=%ROOT_DIR%ffmpeg"
 set "CLOUDFLARE_DIR=%ROOT_DIR%cloudflare"
 
-:: ---------------------------------------------
-:: 2. 외부 파일 복사
-:: ---------------------------------------------
-
-:: A. 기존 패키지 폴더 삭제 후 재생성 (이전 빌드 흔적 제거)
+:: 2. 기존 패키지 폴더 삭제 후 재생성 (이전 빌드 흔적 제거)
 if exist "%PACKAGE_DIR%" (
 echo [INFO] Deleting previous build folder: %PACKAGE_DIR%
 rd /s /q "%PACKAGE_DIR%"
@@ -30,7 +24,7 @@ echo [INFO] Package folder created.
 echo ---------------------------------------------
 echo [INFO] Copying external assets to package folder...
 
-:: B. 환경 설정 파일 (.env) 복사 (ROOT 폴더에서 package로)
+:: 3. 환경 설정 파일 (.env) 복사 (ROOT 폴더에서 package로)
 cd %BACKEND_DIR%
 call generate-env.bat
 cd %ROOT_DIR%
@@ -43,7 +37,7 @@ echo [ERROR] .env not found. Aborting script.
 exit /b 1
 )
 
-:: C. 사용자 설정 파일 (config.json) 복사 (backend 폴더에서 package로)
+:: 4. 사용자 설정 파일 (config.json) 복사 (backend 폴더에서 package로)
 if exist "%BACKEND_DIR%\config.json" (
 copy "%BACKEND_DIR%\config.json" "%PACKAGE_DIR%" /Y
 echo [INFO] Copied config.json
@@ -52,7 +46,7 @@ echo [ERROR] config.json not found. Aborting script.
 exit /b 1
 )
 
-:: D. CCTV 목록 파일 (cctv.txt) 복사 (backend 폴더에서 package로)
+:: 5. CCTV 목록 파일 (cctv.txt) 복사 (backend 폴더에서 package로)
 if exist "%BACKEND_DIR%\cctv.txt" (
 copy "%BACKEND_DIR%\cctv.txt" "%PACKAGE_DIR%" /Y
 echo [INFO] Copied cctv.txt
@@ -61,7 +55,7 @@ echo [ERROR] cctv.txt not found. Aborting script.
 exit /b 1
 )
 
-:: E. ffmpeg 복사
+:: 6. ffmpeg 폴더 복사
 if exist "%FFMPEG_DIR%" (
 xcopy "%FFMPEG_DIR%" "%PACKAGE_DIR%\ffmpeg" /E /I /Y
 echo [INFO] Copied ffmpeg folder
@@ -69,6 +63,8 @@ echo [INFO] Copied ffmpeg folder
 echo [ERROR] ffmpeg folder not found. Aborting script.
 exit /b 1
 )
+
+:: 7. ffmpeg 스크립트 복사
 if exist "%ROOT_DIR%\start_ffmpeg.bat" (
 copy "%ROOT_DIR%\start_ffmpeg.bat" "%PACKAGE_DIR%" /Y
 echo [INFO] Copied start_ffmpeg.bat
@@ -84,11 +80,11 @@ echo [ERROR] run_single_stream.bat not found. Aborting script.
 exit /b 1
 )
 
-:: F. HLS 스트리밍 폴더 생성
+:: 8. HLS 스트리밍 폴더 생성
 mkdir "%PACKAGE_DIR%\hls"
 echo [INFO] hls folder created.
 
-:: G. cloudflare 터널생성
+:: 9. cloudflare 터널생성
 echo ---------------------------------------------
 echo [INFO] Creating Cloudflare Tunnel
 
@@ -101,7 +97,7 @@ call make_cloudflare_package.bat %CUSTOMER_ID%
 echo [INFO] Customer ID set in make_package.bat: %CUSTOMER_ID%
 cd %ROOT_DIR%
 
-:: H. cloudflare 복사
+:: 10. cloudflare 터널폴더 복사
 if exist "%CLOUDFLARE_DIR%" (
 xcopy "%CLOUDFLARE_DIR%\%CUSTOMER_ID%" "%PACKAGE_DIR%\cloudflare" /E /I /Y
 echo [INFO] Copied cloudflare folder
@@ -110,10 +106,16 @@ echo [ERROR] cloudflare folder not found. Aborting script.
 exit /b 1
 )
 
+:: 11. 실행 스크립트 복사
+if exist "%ROOT_DIR%\cctvgo.bat" (
+copy "%ROOT_DIR%\cctvgo.bat" "%PACKAGE_DIR%" /Y
+echo [INFO] Copied cctvgo.bat
+) else (
+echo [ERROR] cctvgo.bat not found. Aborting script.
+exit /b 1
+)
 
-:: ---------------------------------------------
-:: 3. 프론트엔드 빌드 (frontend/dist 생성)
-:: ---------------------------------------------
+:: 12. 프론트엔드 빌드 (frontend/dist 생성)
 echo ---------------------------------------------
 echo [INFO] Installing and building frontend...
 cd /d "%ROOT_DIR%frontend"
@@ -121,7 +123,7 @@ echo [DEBUG] Current Directory 1 (Frontend): %CD%
 call npm install
 call npm run build
 
-:: A. 프론트엔드 빌드 결과 (frontend/dist) 복사
+:: 13. 프론트엔드 빌드 결과 (frontend/dist) 복사
 cd %ROOT_DIR%
 if exist "frontend\dist" (
 xcopy "frontend\dist" "%PACKAGE_DIR%\frontend\dist" /E /I /Y
@@ -131,9 +133,7 @@ echo [ERROR] frontend/dist folder not found. Aborting script.
 exit /b 1
 )
 
-:: ---------------------------------------------
-:: 4. 백엔드 빌드 (Executable 생성)
-:: ---------------------------------------------
+:: 14. 백엔드 빌드 (Executable 생성)
 echo ---------------------------------------------
 echo [INFO] Installing backend dependencies and running PKG...
 cd "%BACKEND_DIR%"
