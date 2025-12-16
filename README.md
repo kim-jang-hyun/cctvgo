@@ -14,7 +14,7 @@
 
 
 
-실행방법 : cmd -> C:\\cctvgo\\backend로 이동 -> npm run start:all 실행
+실행방법 : cctvgo.bat 실행
 
 
 

@@ -106,7 +106,17 @@ echo [ERROR] cloudflare folder not found. Aborting script.
 exit /b 1
 )
 
-:: 11. 실행 스크립트 복사
+:: 11. README.md 파일 복사
+if exist "%ROOT_DIR%\README.md" (
+copy "%ROOT_DIR%\README.md" "%PACKAGE_DIR%" /Y
+echo [INFO] Copied README.md
+) else (
+echo [ERROR] README.md not found. Aborting script.
+exit /b 1
+)
+
+
+:: 12. 실행 스크립트 복사
 if exist "%ROOT_DIR%\cctvgo.bat" (
 copy "%ROOT_DIR%\cctvgo.bat" "%PACKAGE_DIR%" /Y
 echo [INFO] Copied cctvgo.bat
@@ -115,7 +125,7 @@ echo [ERROR] cctvgo.bat not found. Aborting script.
 exit /b 1
 )
 
-:: 12. 프론트엔드 빌드 (frontend/dist 생성)
+:: 13. 프론트엔드 빌드 (frontend/dist 생성)
 echo ---------------------------------------------
 echo [INFO] Installing and building frontend...
 cd /d "%ROOT_DIR%frontend"
@@ -123,7 +133,7 @@ echo [DEBUG] Current Directory 1 (Frontend): %CD%
 call npm install
 call npm run build
 
-:: 13. 프론트엔드 빌드 결과 (frontend/dist) 복사
+:: 14. 프론트엔드 빌드 결과 (frontend/dist) 복사
 cd %ROOT_DIR%
 if exist "frontend\dist" (
 xcopy "frontend\dist" "%PACKAGE_DIR%\frontend\dist" /E /I /Y
@@ -133,7 +143,7 @@ echo [ERROR] frontend/dist folder not found. Aborting script.
 exit /b 1
 )
 
-:: 14. 백엔드 빌드 (Executable 생성)
+:: 15. 백엔드 빌드 (Executable 생성)
 echo ---------------------------------------------
 echo [INFO] Installing backend dependencies and running PKG...
 cd "%BACKEND_DIR%"
