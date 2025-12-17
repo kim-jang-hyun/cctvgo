@@ -10,7 +10,7 @@ start "FFmpeg HLS Stream" cmd /k "%cd%\start_ffmpeg.bat"
 
 echo ---------------------------------------------
 echo [INFO] Starting Cloudflare Tunnel in new window...
-cd /d %~dp0\cloudflare
+cd /d %~dp0
 start "Cloudflare Tunnel" cmd /k "%cd%\cloudflare\start_tunnel.bat"
 
 echo ---------------------------------------------
