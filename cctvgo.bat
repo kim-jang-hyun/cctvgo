@@ -1,12 +1,12 @@
 @echo off
+chcp 65001 > nul
+setlocal enabledelayedexpansion
+
 :: 1. 창 제목 설정
 title CCTVGO 통합 관제 모니터링
 
 :: 2. 창 크기 고정 (가로 80, 세로 25)
 mode con: cols=80 lines=25
-
-chcp 65001 > nul
-setlocal enabledelayedexpansion
 
 :: 로그 폴더 생성
 if not exist "logs" mkdir logs
