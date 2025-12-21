@@ -74,7 +74,6 @@ echo ▶️ start_tunnel.bat 생성
 echo @echo off
 echo cd /d %%~dp0
 echo cloudflared.exe --config config.yml --protocol http2 tunnel run
-echo pause
 ) > %OUTPUT_DIR%\start_tunnel.bat
 
 :: 10. cloudflared.exe 복사
