@@ -11,7 +11,7 @@ set BASE_DIR=hls
 :: 폴더 정리 (기존 코드 유지)
 if exist "%BASE_DIR%\" rmdir /S /Q "%BASE_DIR%" 2>nul
 
-echo [INFO] Starting all FFMPEG stream monitors... (%time%)
+echo [%date% %time%][INFO] Starting all FFMPEG stream monitors...
 set "PROCESS_COUNT=0"
 :: 설정 파일을 읽고 순번을 사용하여 출력 정보를 자동 생성
 for /f "tokens=1 delims=, eol=#" %%a in ('type "%STREAM_CONFIG_FILE%"') do (
@@ -24,10 +24,10 @@ for /f "tokens=1 delims=, eol=#" %%a in ('type "%STREAM_CONFIG_FILE%"') do (
 
     :: 출력 디렉토리 생성
     if not exist "!OUTPUT_DIR!\" mkdir "!OUTPUT_DIR!"
-    echo [INFO] Launching Monitor "!PROCESS_COUNT!: !RTSP_URL! -> !OUTPUT_DIR!\!STREAM_FILE!"
+    echo [%date% %time%][INFO] Launching Monitor "!PROCESS_COUNT!: !RTSP_URL! -> !OUTPUT_DIR!\!STREAM_FILE!"
     
     :: /b 옵션으로 창 숨기고 로그 파일 생성
     start /b "Stream_!PROCESS_COUNT!" cmd /c "%~dp0!SINGLE_STREAM_SCRIPT! ^"!RTSP_URL!^" ^"!OUTPUT_DIR!^" ^"!STREAM_FILE!^" ^"!RETRY_DELAY!^" >> ^"%~dp0logs\stream_!PROCESS_COUNT!.log^" 2>&1"
 )
 echo ---------------------------------------------
-echo [INFO] All %PROCESS_COUNT% stream monitors started in background.
+echo [%date% %time%][INFO] All %PROCESS_COUNT% stream monitors started in background.

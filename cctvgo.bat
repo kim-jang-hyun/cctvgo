@@ -83,9 +83,9 @@ for /f %%c in ('tasklist /fi "imagename eq cloudflared.exe" /nh ^| find /c "clou
 
 :: 개수에 따라 출력 (if-else 구조 명확화)
 if !CF_COUNT! gtr 0 (
-    echo   - Cloudflare Tunnel     : 정상 작동 중 ^(!CF_COUNT!개^)
+    echo   - Cloudflare Tunnel   : 정상 작동 중 ^(!CF_COUNT!개^)
 ) else (
-    echo   - Cloudflare Tunnel     : 오류: 작동 중지 ^^!^^!^^!
+    echo   - Cloudflare Tunnel   : 오류: 작동 중지 ^^!^^!^^!
 )
 
 
@@ -102,7 +102,7 @@ if !CS_COUNT! gtr 0 (
 
 echo.
 echo -----------------------------------------------------
-echo 마지막 업데이트: !time! (30초마다 자동 갱신)
+echo 마지막 업데이트: [%date% %time%] (30초마다 자동 갱신)
 echo.
 echo ※ 프로그램을 종료하시려면 우측 상단 [X] 버튼을 눌러주세요.
 echo -----------------------------------------------------

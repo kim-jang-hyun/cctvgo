@@ -22,20 +22,20 @@ echo OUTPUT_FILE: !OUTPUT_FILE!
 :: 워커 스크립트의 무한 루프 시작
 :single_loop
 echo ---------------------------------------------
-echo [INFO] [!STREAM_FILE!] Trying TCP first... (!time!)
+echo [%date% %time%][INFO] [!STREAM_FILE!] Trying TCP first...
 
 :: 1. TCP 시도
 ffmpeg -re -fflags nobuffer -rtsp_transport tcp -i !RTSP_URL! -c:v copy -c:a copy -f hls -hls_time 2 -hls_list_size 5 -hls_flags delete_segments !OUTPUT_FILE!
 
 if not errorlevel 0 (
     echo [WARN] [!STREAM_FILE!] TCP failed or stopped "(Error: !ERRORLEVEL!)".
-    echo "Trying UDP... (!time!)"
+    echo [%date% %time%] "Trying UDP..."
 
     :: 2. UDP 시도
     ffmpeg -re -fflags nobuffer -rtsp_transport udp -i !RTSP_URL! -c:v copy -c:a copy -f hls -hls_time 2 -hls_list_size 5 -hls_flags delete_segments !OUTPUT_FILE!
 )
 
-echo [INFO] [!STREAM_FILE!] ffmpeg ended. Waiting !RETRY_DELAY! seconds before restart... (!time!)
+echo [%date% %time%][INFO] [!STREAM_FILE!] ffmpeg ended. Waiting !RETRY_DELAY! seconds before restart...
 
 timeout /t !RETRY_DELAY! /nobreak >nul
 goto single_loop

@@ -1,3 +1,28 @@
+// --- 타임스탬프 로그 설정 시작 ---
+const originalLog = console.log;
+const originalError = console.error;
+
+function getTimestamp() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    const ms = String(now.getMilliseconds()).padStart(3, '0').substring(0, 2); // .20 형식
+    return `[${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${ms}]`;
+}
+
+console.log = (...args) => {
+    originalLog(getTimestamp() + (args[0]?.toString().startsWith('[') ? '' : ' ') + args.join(' '));
+};
+
+console.error = (...args) => {
+    originalError(getTimestamp() + " [ERROR] " + args.join(' '));
+};
+// --- 타임스탬프 로그 설정 끝 ---
+
 const express = require('express');
 const session = require('express-session');
 const fs = require('fs');
