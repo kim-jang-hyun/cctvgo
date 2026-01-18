@@ -10,12 +10,25 @@ mode con: cols=80 lines=25
 
 :: 로그 폴더 생성
 if not exist "logs" mkdir logs
-set MAIN_LOG=logs\main_execution.log
+set LOG_DIR=%~dp0logs
+set MAIN_LOG=%LOG_DIR%\main_execution.log
 
-:: --- 중복 실행 방지: 기존 프로세스 강제 종료 ---
 echo =====================================================
 echo   기존 프로세스 정리 및 시스템 초기화 중...
 echo =====================================================
+
+:: --- [7일 이전 로그 삭제] ---
+:: logs 폴더 안에서 7일이 지난 .log 파일을 찾아 삭제합니다.
+forfiles /p "%LOG_DIR%" /m *.log /d -7 /c "cmd /c del @path" 2>nul
+
+if %errorlevel% equ 0 (
+    echo [시스템] 오래된 로그 정리 완료.
+) else (
+    echo [시스템] 삭제할 오래된 로그가 없습니다.
+)
+:: ------------------------------------------
+
+:: --- 중복 실행 방지: 기존 프로세스 강제 종료 ---
 echo [%date% %time%] 시스템 재시작 (기존 프로세스 정리) >> %MAIN_LOG%
 
 :: /F: 강제 종료, /IM: 이미지 이름 지정, /T: 자식 프로세스까지 종료
