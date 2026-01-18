@@ -101,7 +101,6 @@ if !CF_COUNT! gtr 0 (
     echo   - Cloudflare Tunnel   : 오류: 작동 중지 ^^!^^!^^!
 )
 
-
 :: Service 체크
 set "CS_COUNT=0"
 for /f %%c in ('tasklist /fi "imagename eq cctvgo-service.exe" /nh ^| find /c "cctvgo-service.exe"') do set "CS_COUNT=%%c"
@@ -113,6 +112,34 @@ if !CS_COUNT! gtr 0 (
     echo   - CCTVGO Service     : 오류: 작동 중지 ^^!^^!^^!
 )
 
+:: 하드웨어 자원 확인 (PowerShell 사용)0
+:: 1. CPU 사용율 (정수)
+for /f "delims=" %%a in ('powershell -NoProfile -Command "$v = (Get-Counter '\Processor(_Total)\%% Processor Time').CounterSamples.CookedValue; [Math]::Round($v)"') do set CPU_LOAD=%%a
+
+:: 2. 가용 메모리 (MB)
+for /f "delims=" %%a in ('powershell -NoProfile -Command "[Math]::Round((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1024)"') do set FREE_MEM_MB=%%a
+
+:: 3. 디스크 잔여 용량 (C: 기준, GB)
+for /f "delims=" %%a in ('powershell -NoProfile -Command "[Math]::Round((Get-CimInstance Win32_LogicalDisk | Where-Object DeviceID -eq 'C:').FreeSpace / 1GB)"') do set DISK_FREE=%%a
+
+:: 4. 네트워크 송신 속도 (Mbps)
+for /f "delims=" %%a in ('powershell -NoProfile -Command "$n = Get-Counter '\Network Interface(*)\Bytes Sent/sec' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty CounterSamples | Measure-Object -Property CookedValue -Sum; [Math]::Round(($n.Sum * 8) / 1MB, 2)"') do set NET_SENT=%%a
+
+:: 5. 네트워크 스신 속도 (Mbps)
+for /f "delims=" %%a in ('powershell -NoProfile -Command "$n = Get-Counter '\Network Interface(*)\Bytes Recv/sec' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty CounterSamples | Measure-Object -Property CookedValue -Sum; [Math]::Round(($n.Sum * 8) / 1MB, 2)"') do set NET_RECV=%%a
+
+:: [로그 파일 기록]
+echo [%date% %time%] CPU:!CPU_LOAD!%% ^| Mem:!FREE_MEM_MB!MB ^| Disk:!DISK_FREE!GB ^| Net:!NET_SENT!Mbps ^| Net:!NET_RECV!Mbps >> "%LOG_DIR%\resource_usage.log"
+
+:: [화면 출력]
+echo.
+echo [현재 시스템 상태]
+echo   - CPU 사용율   : !CPU_LOAD! %%
+echo   - 가용 메모리  : !FREE_MEM_MB! MB
+echo   - 디스크 여유  : !DISK_FREE! GB
+echo   - 네트웍 송신  : !NET_SENT! Mbps
+echo   - 네트웍 수신  : !NET_RECV! Mbps
+echo -----------------------------------------------------
 echo.
 echo -----------------------------------------------------
 echo 마지막 업데이트: [%date% %time%] (30초마다 자동 갱신)
@@ -120,7 +147,7 @@ echo.
 echo ※ 프로그램을 종료하시려면 우측 상단 [X] 버튼을 눌러주세요.
 echo -----------------------------------------------------
 
-:: 30초 동안 대기 (화면을 갱신하기 위한 시간 벌기)
-timeout /t 30 /nobreak > nul
+:: 60초 동안 대기 (화면을 갱신하기 위한 시간 벌기)
+timeout /t 60 /nobreak > nul
 
 goto monitor_loop
