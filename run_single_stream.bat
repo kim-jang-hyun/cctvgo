@@ -25,14 +25,13 @@ echo ---------------------------------------------
 echo [%date% %time%][INFO] [!STREAM_FILE!] Trying TCP first...
 
 :: 1. TCP 시도
-ffmpeg -fflags +genpts+nobuffer -rtsp_transport tcp -i !RTSP_URL! -c:v copy -an -f hls -hls_time 2 -hls_list_size 5 -hls_flags delete_segments !OUTPUT_FILE!
-
+ffmpeg -fflags +genpts+nobuffer+flush_packets -rtsp_transport tcp -i !RTSP_URL! -c:v copy -an -f hls -hls_time 1 -hls_list_size 3 -hls_flags delete_segments+discont_start+independent_segments !OUTPUT_FILE!
 if not errorlevel 0 (
     echo [WARN] [!STREAM_FILE!] TCP failed or stopped "(Error: !ERRORLEVEL!)".
     echo [%date% %time%] "Trying UDP..."
 
     :: 2. UDP 시도
-    ffmpeg -fflags +genpts+nobuffer -rtsp_transport udp -i !RTSP_URL! -c:v copy -an -f hls -hls_time 2 -hls_list_size 5 -hls_flags delete_segments !OUTPUT_FILE!
+    ffmpeg -fflags +genpts+nobuffer+flush_packets -rtsp_transport udp -i !RTSP_URL! -c:v copy -an -f hls -hls_time 1 -hls_list_size 3 -hls_flags delete_segments+discont_start+independent_segments !OUTPUT_FILE!
 )
 
 echo [%date% %time%][INFO] [!STREAM_FILE!] ffmpeg ended. Waiting !RETRY_DELAY! seconds before restart...

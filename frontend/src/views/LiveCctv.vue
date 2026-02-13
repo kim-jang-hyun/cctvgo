@@ -157,10 +157,22 @@ const initPlayers = () => {
         }
 
         if (Hls.isSupported()) {
-            const hls = new Hls();
-            hls.loadSource(stream.url);
-            hls.attachMedia(video);
-            hlsInstances.push(hls);
+          const hls = new Hls({
+                enableWorker: true,
+                lowLatencyMode: true,           // 저지연 모드 활성화
+                backBufferLength: 0,            // 지나간 버퍼 즉시 제거
+                maxBufferLength: 4,             // 최대 버퍼 길이를 짧게 (기본 30초 -> 4초)
+                maxMaxBufferLength: 10,
+                liveSyncDurationCount: 1.5,     // 최신 세그먼트와 재생 시점의 거리 (매우 중요)
+                liveMaxLatencyDurationCount: 3, // 허용하는 최대 지연 세그먼트 수
+                manifestLoadingMaxRetry: 10,
+                levelLoadingMaxRetry: 10,
+          });
+          
+          hls.loadSource(stream.url);
+          hls.attachMedia(video);
+          hlsInstances.push(hls);
+          
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
             video.src = stream.url;
         } else {
