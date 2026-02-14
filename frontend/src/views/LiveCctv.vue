@@ -8,6 +8,7 @@
       v-model="cameraList"
       item-key="id"
       class="video-grid"
+      :style="{ gridTemplateColumns: `repeat(${gridColumns}, 1fr)` }"
       :sort="false"
     >
       <template #item="{ element, index }">
@@ -38,7 +39,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, nextTick } from 'vue';
+import { ref, reactive, computed, onMounted, nextTick } from 'vue';
+
+const ROWS = 2;           // 행은 항상 2개
+const MIN_COLUMNS = 2;   // 1~4대는 2열, 5대 이상은 열 추가
 import Hls from 'hls.js';
 import draggable from 'vuedraggable';
 
@@ -95,47 +99,40 @@ const getCameraList = async () => {
 };
 
 /**
+ * 행은 항상 2개. 1~4대: 2열(2x2), 5대 이상: 열만 추가 (2x3, 2x4, …)
  * @param {Array<string>} cameraNameList - 백엔드에서 받아온 카메라 이름 목록
  */
 const initCameraList = (cameraNameList) => {
-  const cameraCount = cameraNameList.length;
-  cameraList.value = JSON.parse(JSON.stringify(DEFAULT_CAMERA_LIST));
-
   if (error.value !== null) {
     console.error('initCameraList error: ', error.value);
     cameraList.value = [];
     return;
   }
 
-  if (cameraCount > DEFAULT_CAMERA_LIST.length) {
-    console.error('initCameraList error: ', cameraCount);
-    cameraList.value = [];
-    return;
-  }
+  const cameraCount = cameraNameList.length;
+  const columns = Math.max(MIN_COLUMNS, Math.ceil(cameraCount / ROWS));
+  const totalSlots = ROWS * columns;
 
-  for (let i = 0; i < DEFAULT_CAMERA_LIST.length; ++i) {
-
-    let isValidCamera = (i < cameraCount);
-    if (isValidCamera) {
-      cameraList.value[i].name = cameraNameList[i];
-    }
-    else {
-      cameraList.value[i].name = null;
-      cameraList.value[i].url = null;
-      cameraList.value[i].viewIndex = null;
-    }
+  cameraList.value = [];
+  for (let i = 0; i < totalSlots; i++) {
+    const hasCamera = i < cameraCount;
+    cameraList.value.push({
+      id: 'cam' + (i + 1),
+      name: hasCamera ? cameraNameList[i] : null,
+      url: hasCamera ? `/hls/stream${i + 1}/stream${i + 1}.m3u8` : null,
+      viewIndex: i,
+    });
   }
-  console.log(`cameraList가 ${cameraCount}개로 초기화되었습니다.`, cameraList.value);
+  console.log(`cameraList가 ${cameraCount}개(그리드 ${columns}x${ROWS}=${totalSlots}칸)로 초기화되었습니다.`, cameraList.value);
 };
 
-// 카메라 리스트
-const DEFAULT_CAMERA_LIST = [
-  { id: 'cam1', name: 'Camera 1', url: '/hls/stream1/stream1.m3u8', viewIndex: 0 },
-  { id: 'cam2', name: 'Camera 2', url: '/hls/stream2/stream2.m3u8', viewIndex: 1 },
-  { id: 'cam3', name: 'Camera 3', url: '/hls/stream3/stream3.m3u8', viewIndex: 2 },
-  { id: 'cam4', name: 'Camera 4', url: '/hls/stream4/stream4.m3u8', viewIndex: 3 },
-];
 const cameraList = ref(null);
+
+/** 그리드 열 수: 1~4대는 2열, 5대 이상은 ceil(개수/2)열 */
+const gridColumns = computed(() => {
+  const n = cameraList.value?.length ?? 0;
+  return n ? Math.max(MIN_COLUMNS, Math.ceil(n / ROWS)) : MIN_COLUMNS;
+});
 
 // HLS 인스턴스와 비디오 태그 ref
 const hlsInstances = [];
@@ -214,16 +211,16 @@ h2 {
   text-align: center;
 }
 
-/* CCTV 영상 4분할 그리드 */
+/* CCTV 영상 그리드: 행 2개 고정, 열은 카메라 수에 따라 동적 (1~4대=2열, 5대 이상=열 추가) */
 .video-grid {
-  flex: 1; /* 상단 제목과 카메라 리스트 제외한 남은 공간 전부 차지 */
+  flex: 1;
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
   grid-template-rows: repeat(2, 1fr);
+  /* grid-template-columns는 :style로 동적 적용 */
   gap: 6px;
   width: 100%;
-  height: 100%; /* 부모 높이 모두 채움 */
-  overflow: hidden; /* 스크롤 안 생기게 */
+  height: 100%;
+  overflow: hidden;
 }
 
 /* 각각 영상 컨테이너 */
