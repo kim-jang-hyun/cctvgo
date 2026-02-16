@@ -2,9 +2,38 @@
   <div class="page-wrapper">
     <h2>실시간 CCTV 스트리밍</h2>
 
-    <!-- 채널 뷰어 (드래그앤드랍 가능) -->
+    <!-- 모바일: 한 화면에 1개 전체 화면 + 카메라 선택 리스트 -->
+    <template v-if="isMobile && cameraList">
+      <div class="mobile-video-wrap">
+        <div class="video-label mobile-label">{{ currentMobileCamera?.name || '선택된 카메라' }}</div>
+        <video
+          v-if="currentMobileCamera?.url"
+          ref="mobileVideoRef"
+          class="mobile-video"
+          autoplay
+          muted
+          playsinline
+          controls
+        ></video>
+      </div>
+      <div class="mobile-tab-selector">
+        <div class="tab-inner">
+          <button
+            v-for="(cam, i) in camerasWithUrl"
+            :key="cam.id"
+            class="tab-item"
+            :class="{ active: selectedMobileIndex === i }"
+            @click="selectedMobileIndex = i"
+          >
+            {{ cam.name || '카메라 ' + (i + 1) }}
+          </button>
+        </div>
+      </div>
+    </template>
+
+    <!-- 데스크톱: 그리드 뷰 -->
     <draggable
-      v-if="cameraList"
+      v-else-if="cameraList"
       v-model="cameraList"
       item-key="id"
       class="video-grid"
@@ -12,16 +41,8 @@
       :sort="false"
     >
       <template #item="{ element, index }">
-        <!-- 모바일에서는 선택된 채널만 표시 -->
-        <div
-          class="video-container"
-        >
-          <!-- 채널명 표시 -->
-          <div class="video-label">
-            {{ element.name }}
-          </div>
-
-          <!-- 비디오 -->
+        <div class="video-container">
+          <div class="video-label">{{ element.name }}</div>
           <video
             v-if="element.url !== null"
             :ref="el => videoElements[index] = el"
@@ -39,76 +60,83 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, nextTick } from 'vue';
-
-const ROWS = 2;           // 행은 항상 2개
-const MIN_COLUMNS = 2;   // 1~4대는 2열, 5대 이상은 열 추가
+import { ref, reactive, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import Hls from 'hls.js';
 import draggable from 'vuedraggable';
 
-// 상태 변수 정의
-const loading = ref(true);
-const error = ref(null);
+// --- 상수 ---
+const ROWS = 2;
+const MIN_COLUMNS = 2;
+const MOBILE_BREAKPOINT = 768;
 
-/**
- * 백엔드에서 카메라 리스트를 가져오는 비동기 함수
- * @returns {Array<string>} 카메라 이름 목록
- */
-const getCameraList = async () => {
-    const API_URL = '/api/get-channel-list'; 
-    let channelList = []; // 로컬 변수 선언
-
-    loading.value = true; // 로딩 시작
-    error.value = null;   // 에러 초기화
-
-    try {
-        // 1. await fetch()로 응답 객체를 바로 받습니다.
-        const response = await fetch(API_URL);
-
-        // 2. HTTP 4xx, 5xx 에러 처리
-        if (!response.ok) {
-            // 서버에서 에러 메시지를 JSON 형태로 보냈을 경우 처리
-            const errorData = await response.json().catch(() => ({ message: response.statusText }));
-            // 오류를 throw하여 catch 블록으로 이동
-            throw new Error(errorData.message || `Failed to get: ${response.status}`);
-        }
-        
-        // 3. 응답 데이터를 JSON으로 파싱
-        const data = await response.json();
-
-        // 4. 백엔드의 status 필드 확인 (선택적)
-        if (data.status !== 'success') {
-            throw new Error(data.message || 'API responded with non-success status.');
-        }
-
-        // 5. 성공적으로 데이터를 받으면 channelList 업데이트
-        console.log('채널 리스트:', data.channelList); // ex) ['거실', '안방']
-        channelList = data.channelList || []; 
-
-      } catch (err) {
-        // 네트워크 오류 또는 throw된 오류 처리
-        console.error('API call error:', err.message);
-        error.value = err.message;
-        // 오류 발생 시 빈 배열 반환
-        channelList = []; 
-      } finally {
-        loading.value = false; // 로딩 완료
-    }
-
-    return channelList; // 로컬 변수 반환
+const hlsConfig = {
+  enableWorker: true,
+  lowLatencyMode: true,
+  backBufferLength: 0,
+  maxBufferLength: 4,
+  maxMaxBufferLength: 10,
+  liveSyncDurationCount: 1.5,
+  liveMaxLatencyDurationCount: 3,
+  manifestLoadingMaxRetry: 10,
+  levelLoadingMaxRetry: 10,
 };
 
-/**
- * 행은 항상 2개. 1~4대: 2열(2x2), 5대 이상: 열만 추가 (2x3, 2x4, …)
- * @param {Array<string>} cameraNameList - 백엔드에서 받아온 카메라 이름 목록
- */
+// --- 상태 ---
+const cameraList = ref(null);
+const error = ref(null);
+
+const isMobile = ref(false);
+const selectedMobileIndex = ref(0);
+const mobileVideoRef = ref(null);
+let mobileHlsInstance = null;
+
+const hlsInstances = [];
+const videoElements = reactive([]);
+
+// --- computed ---
+const gridColumns = computed(() => {
+  const n = cameraList.value?.length ?? 0;
+  return n ? Math.max(MIN_COLUMNS, Math.ceil(n / ROWS)) : MIN_COLUMNS;
+});
+
+const camerasWithUrl = computed(() => (cameraList.value || []).filter(c => c?.url));
+
+const currentMobileCamera = computed(
+  () => camerasWithUrl.value[selectedMobileIndex.value] ?? null
+);
+
+// --- API · 카메라 목록 ---
+const getCameraList = async () => {
+  const API_URL = '/api/get-channel-list';
+  let channelList = [];
+  error.value = null;
+
+  try {
+    const response = await fetch(API_URL);
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ message: response.statusText }));
+      throw new Error(errorData.message || `Failed to get: ${response.status}`);
+    }
+    const data = await response.json();
+    if (data.status !== 'success') {
+      throw new Error(data.message || 'API responded with non-success status.');
+    }
+    console.log('채널 리스트:', data.channelList);
+    channelList = data.channelList || [];
+  } catch (err) {
+    console.error('API call error:', err.message);
+    error.value = err.message;
+    channelList = [];
+  }
+  return channelList;
+};
+
 const initCameraList = (cameraNameList) => {
   if (error.value !== null) {
     console.error('initCameraList error: ', error.value);
     cameraList.value = [];
     return;
   }
-
   const cameraCount = cameraNameList.length;
   const columns = Math.max(MIN_COLUMNS, Math.ceil(cameraCount / ROWS));
   const totalSlots = ROWS * columns;
@@ -120,65 +148,78 @@ const initCameraList = (cameraNameList) => {
       id: 'cam' + (i + 1),
       name: hasCamera ? cameraNameList[i] : null,
       url: hasCamera ? `/hls/stream${i + 1}/stream${i + 1}.m3u8` : null,
-      viewIndex: i,
     });
   }
   console.log(`cameraList가 ${cameraCount}개(그리드 ${columns}x${ROWS}=${totalSlots}칸)로 초기화되었습니다.`, cameraList.value);
 };
 
-const cameraList = ref(null);
+// --- HLS · 플레이어 ---
+function initMobilePlayer() {
+  if (!mobileVideoRef.value || !currentMobileCamera.value?.url) return;
+  if (mobileHlsInstance) {
+    mobileHlsInstance.destroy();
+    mobileHlsInstance = null;
+  }
+  const video = mobileVideoRef.value;
+  const url = currentMobileCamera.value.url;
+  if (Hls.isSupported()) {
+    const hls = new Hls(hlsConfig);
+    hls.loadSource(url);
+    hls.attachMedia(video);
+    mobileHlsInstance = hls;
+  } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+    video.src = url;
+  }
+}
 
-/** 그리드 열 수: 1~4대는 2열, 5대 이상은 ceil(개수/2)열 */
-const gridColumns = computed(() => {
-  const n = cameraList.value?.length ?? 0;
-  return n ? Math.max(MIN_COLUMNS, Math.ceil(n / ROWS)) : MIN_COLUMNS;
+function initPlayers() {
+  hlsInstances.forEach(hls => hls.destroy());
+  hlsInstances.length = 0;
+
+  if (isMobile.value) {
+    initMobilePlayer();
+    return;
+  }
+
+  cameraList.value.forEach((stream, index) => {
+    const video = videoElements[index];
+    if (!video) return;
+    if (stream.url == null) {
+      video.src = '';
+      return;
+    }
+    if (Hls.isSupported()) {
+      const hls = new Hls(hlsConfig);
+      hls.loadSource(stream.url);
+      hls.attachMedia(video);
+      hlsInstances.push(hls);
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = stream.url;
+    } else {
+      alert(`HLS를 지원하지 않는 브라우저입니다. (Stream: ${stream.name})`);
+    }
+  });
+}
+
+// --- 모바일 감지 ---
+function checkMobile() {
+  isMobile.value = window.innerWidth <= MOBILE_BREAKPOINT;
+}
+
+// --- watch ---
+watch([selectedMobileIndex, currentMobileCamera], () => {
+  if (isMobile.value) initMobilePlayer();
 });
 
-// HLS 인스턴스와 비디오 태그 ref
-const hlsInstances = [];
-const videoElements = reactive([]);
+watch(isMobile, () => {
+  nextTick(() => initPlayers());
+});
 
-// HLS 플레이어 초기화
-const initPlayers = () => {
-    hlsInstances.forEach(hls => hls.destroy());
-    hlsInstances.length = 0;
-
-    cameraList.value.forEach((stream, index) => {
-        const video = videoElements[index];
-        if (!video) return;
-
-        // 💡 빈 채널(플레이스홀더)이면 스트림 로드를 건너뜁니다.
-        if (stream.url === null || stream.url === undefined) {
-            video.src = ''; // 비디오 소스 제거
-            return;
-        }
-
-        if (Hls.isSupported()) {
-          const hls = new Hls({
-                enableWorker: true,
-                lowLatencyMode: true,           // 저지연 모드 활성화
-                backBufferLength: 0,            // 지나간 버퍼 즉시 제거
-                maxBufferLength: 4,             // 최대 버퍼 길이를 짧게 (기본 30초 -> 4초)
-                maxMaxBufferLength: 10,
-                liveSyncDurationCount: 1.5,     // 최신 세그먼트와 재생 시점의 거리 (매우 중요)
-                liveMaxLatencyDurationCount: 3, // 허용하는 최대 지연 세그먼트 수
-                manifestLoadingMaxRetry: 10,
-                levelLoadingMaxRetry: 10,
-          });
-          
-          hls.loadSource(stream.url);
-          hls.attachMedia(video);
-          hlsInstances.push(hls);
-          
-        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-            video.src = stream.url;
-        } else {
-            alert(`HLS를 지원하지 않는 브라우저입니다. (Stream: ${stream.name})`);
-        }
-    });
-};
-
+// --- lifecycle ---
 onMounted(async () => {
+  checkMobile();
+  window.addEventListener('resize', checkMobile);
+
   const cameraNameList = await getCameraList();
   initCameraList(cameraNameList);
 
@@ -186,10 +227,17 @@ onMounted(async () => {
   initPlayers();
 });
 
+onUnmounted(() => {
+  window.removeEventListener('resize', checkMobile);
+  if (mobileHlsInstance) {
+    mobileHlsInstance.destroy();
+    mobileHlsInstance = null;
+  }
+});
 </script>
 
 <style scoped>
-/* 전체 페이지 래퍼 */
+/* --- 페이지 --- */
 .page-wrapper {
   width: 100%;
   height: 100dvh;
@@ -201,7 +249,6 @@ onMounted(async () => {
   overflow: hidden;
 }
 
-/* 상단 제목 */
 h2 {
   width: 100%;
   margin-bottom: 10px;
@@ -211,19 +258,17 @@ h2 {
   text-align: center;
 }
 
-/* CCTV 영상 그리드: 행 2개 고정, 열은 카메라 수에 따라 동적 (1~4대=2열, 5대 이상=열 추가) */
+/* --- 데스크톱 그리드 --- */
 .video-grid {
   flex: 1;
   display: grid;
   grid-template-rows: repeat(2, 1fr);
-  /* grid-template-columns는 :style로 동적 적용 */
   gap: 6px;
   width: 100%;
   height: 100%;
   overflow: hidden;
 }
 
-/* 각각 영상 컨테이너 */
 .video-container {
   position: relative;
   width: 100%;
@@ -239,19 +284,12 @@ h2 {
   border-color: #007bff;
 }
 
-.video-container.highlight {
-  border: 2px solid #007bff;
-  box-shadow: 0 0 12px rgba(0, 123, 255, 0.5);
-}
-
-/* 영상 태그 */
 .video-player {
   width: 100%;
   height: 100%;
-  object-fit: cover; /* 영상 꽉 채우기 */
+  object-fit: cover;
 }
 
-/* 영상 레이블 (채널명) */
 .video-label {
   position: absolute;
   top: 4px;
@@ -265,15 +303,67 @@ h2 {
   cursor: pointer;
 }
 
-/* fade transition 효과 */
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.4s;
+/* --- 모바일 --- */
+.mobile-video-wrap {
+  flex: 1;
+  position: relative;
+  width: 100%;
+  min-height: 0;
+  background: #000;
 }
 
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
+.mobile-label {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  z-index: 1;
 }
 
+.mobile-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.mobile-tab-selector {
+  flex-shrink: 0;
+  width: 100%;
+  background: #1a1a1a;
+  padding: 10px 0;
+  border-top: 1px solid #333;
+}
+
+.tab-inner {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  padding: 0 10px;
+  -webkit-overflow-scrolling: touch;
+  gap: 8px;
+}
+
+.tab-inner::-webkit-scrollbar {
+  display: none;
+}
+
+.tab-item {
+  flex-shrink: 0;
+  padding: 8px 16px;
+  background: #2a2a2a;
+  color: #aaa;
+  border: 1px solid #444;
+  border-radius: 20px;
+  font-size: 14px;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.tab-item.active {
+  background: #007bff;
+  color: #fff;
+  border-color: #007bff;
+  font-weight: bold;
+}
 </style>
