@@ -60,7 +60,7 @@ Lesser General Public License (LGPL)의 조건 하에 배포됩니다.
 
 
 
-FFmpeg는 본 제품 내에서 독립적인 실행파일(ffmpeg.exe)로 포함되며,
+FFmpeg는 본 제품 내에서 독립적인 실행파일(cctvgo-ffmpeg.exe)로 포함되며,
 
 내부적으로 명령줄 방식으로만 호출됩니다. 본 소프트웨어는 FFmpeg 소스코드와 직접 연결되거나,
 

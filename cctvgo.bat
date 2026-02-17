@@ -32,7 +32,7 @@ if %errorlevel% equ 0 (
 echo [%date% %time%] 시스템 재시작 (기존 프로세스 정리) >> %MAIN_LOG%
 
 :: /F: 강제 종료, /IM: 이미지 이름 지정, /T: 자식 프로세스까지 종료
-taskkill /F /IM ffmpeg.exe /T >nul 2>&1
+taskkill /F /IM cctvgo-ffmpeg.exe /T >nul 2>&1
 taskkill /F /IM cloudflared.exe /T >nul 2>&1
 taskkill /F /IM cctvgo-service.exe /T >nul 2>&1
 timeout /t 2 > nul
@@ -81,7 +81,7 @@ echo -----------------------------------------------------
 :: ffmpeg 체크 (여러 개일 수 있으므로 개수 표시)
 :: 먼저 개수를 체크 (tasklist의 결과를 직접 변수에 담음)
 set "FF_COUNT=0"
-for /f %%c in ('tasklist /fi "imagename eq ffmpeg.exe" /nh ^| find /c "ffmpeg.exe"') do set "FF_COUNT=%%c"
+for /f %%c in ('tasklist /fi "imagename eq cctvgo-ffmpeg.exe" /nh ^| find /c "cctvgo-ffmpeg.exe"') do set "FF_COUNT=%%c"
 
 :: 개수에 따라 출력 (if-else 구조 명확화)
 if !FF_COUNT! gtr 0 (
