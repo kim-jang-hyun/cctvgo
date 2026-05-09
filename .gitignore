@@ -13,3 +13,8 @@
 !/cloudflare/make_cloudflare_package.bat
 
 /package
+
+# Claude Code
+.agents/
+.claude/
+skills-lock.json

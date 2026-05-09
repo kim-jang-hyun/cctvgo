@@ -125,6 +125,15 @@ echo [ERROR] cctvgo.bat not found. Aborting script.
 exit /b 1
 )
 
+:: 12-1. utils 폴더 복사
+if exist "%ROOT_DIR%utils" (
+xcopy "%ROOT_DIR%utils" "%PACKAGE_DIR%\utils" /E /I /Y
+echo [INFO] Copied utils folder
+) else (
+echo [ERROR] utils folder not found. Aborting script.
+exit /b 1
+)
+
 :: 13. 프론트엔드 빌드 (frontend/dist 생성)
 echo ---------------------------------------------
 echo [INFO] Installing and building frontend...

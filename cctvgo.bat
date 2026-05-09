@@ -35,6 +35,7 @@ echo [%date% %time%] 시스템 재시작 (기존 프로세스 정리) >> %MAIN_L
 taskkill /F /IM cctvgo-ffmpeg.exe /T >nul 2>&1
 taskkill /F /IM cloudflared.exe /T >nul 2>&1
 taskkill /F /IM cctvgo-service.exe /T >nul 2>&1
+taskkill /F /FI "WINDOWTITLE eq CCTVGO_NoSleep*" /T >nul 2>&1
 timeout /t 2 > nul
 echo 기존 프로세스 종료 완료.
 echo.
@@ -44,6 +45,10 @@ echo   CCTVGO 통합 관제 시스템 시작 (백그라운드 모드)
 echo   시작 시간: %date% %time%
 echo =====================================================
 echo [%date% %time%] 시스템 시작 >> %MAIN_LOG%
+
+:: 절전 모드 방지
+echo [0/3] 절전 모드 방지 설정 중...
+start "CCTVGO_NoSleep" powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "%~dp0utils\prevent_sleep.ps1" "%LOG_DIR%\nosleep.heartbeat"
 
 :: FFmpeg 스트림 모니터 실행
 echo [1/3] FFmpeg HLS 스트리밍 준비 중...
@@ -110,6 +115,23 @@ if !CS_COUNT! gtr 0 (
     echo   - CCTVGO Service     : 정상 작동 중 ^(!CS_COUNT!개^)
 ) else (
     echo   - CCTVGO Service     : 오류: 작동 중지 ^^!^^!^^!
+)
+
+:: 절전 모드 방지 체크 (PID 파일로 프로세스 생존 확인)
+set "NS_OK=0"
+set "NS_PID="
+if exist "%LOG_DIR%\nosleep.pid" (
+    for /f "usebackq" %%p in ("%LOG_DIR%\nosleep.pid") do set "NS_PID=%%p"
+    if not "!NS_PID!"=="" (
+        set "NS_COUNT=0"
+        for /f %%c in ('tasklist /fi "PID eq !NS_PID!" /fi "IMAGENAME eq powershell.exe" /nh 2^>nul ^| find /c "powershell"') do set "NS_COUNT=%%c"
+        if !NS_COUNT! gtr 0 set "NS_OK=1"
+    )
+)
+if !NS_OK! gtr 0 (
+    echo   - 절전 모드 방지     : 정상 작동 중
+) else (
+    echo   - 절전 모드 방지     : 오류: 작동 중지 ^^!^^!^^!
 )
 
 :: 하드웨어 자원 확인 (PowerShell 사용)0
