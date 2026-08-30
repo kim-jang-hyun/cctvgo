@@ -400,6 +400,7 @@ body {
     font-weight: 500;
 }
 .contact a:hover { text-decoration: underline; }
+.contact-sep { color: var(--border); }
 
 /* ── FOOTER ── */
 .footer {
