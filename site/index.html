@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="클라우드 없이 쉬운 설치로 어디서든 CCTV 영상을 확인하세요 | Watch your CCTV from anywhere with simple installation">
+    <meta name="description" content="포트포워딩, 공유기 설정 없이 어디서든 CCTV 영상을 확인하세요 | No port forwarding needed — watch your CCTV from anywhere">
     <title>CCTVGO</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,6 +16,7 @@
         <div class="nav-inner">
             <a href="#" class="logo">CCTVGO</a>
             <div class="nav-right">
+                <a href="#faq" class="nav-link" data-ko="자주 묻는 질문" data-en="FAQ">자주 묻는 질문</a>
                 <button class="lang-btn" id="langBtn" onclick="toggleLang()">EN</button>
                 <a href="#request" class="btn btn-nav" data-ko="무료 신청" data-en="Get Started">무료 신청</a>
             </div>
@@ -25,8 +26,8 @@
     <section class="hero">
         <div class="hero-inner">
             <div class="hero-badge" data-ko="무료 베타 서비스 중" data-en="Free Beta">무료 베타 서비스 중</div>
-            <h1 data-ko="어디서든 내 CCTV를 보세요" data-en="Watch Your CCTV<br>From Anywhere">어디서든 내 CCTV를 보세요</h1>
-            <p class="hero-sub" data-ko="클라우드 없이 설치 한 번으로<br>스마트폰, PC에서 언제 어디서나 확인" data-en="One-time installation. No cloud subscription.<br>Access from any smartphone or PC.">클라우드 없이 설치 한 번으로<br>스마트폰, PC에서 언제 어디서나 확인</p>
+            <h1 data-ko="복잡한 포트포워딩 없이<br>내 CCTV를 어디서든 확인하세요" data-en="No Complicated Port Forwarding.<br>Watch Your CCTV, Anywhere.">복잡한 포트포워딩 없이<br>내 CCTV를 어디서든 확인하세요</h1>
+            <p class="hero-sub" data-ko="설치 한 번으로 스마트폰과 PC에서<br>언제 어디서나 바로 확인" data-en="One simple install.<br>Access anytime from your smartphone or PC.">설치 한 번으로 스마트폰과 PC에서<br>언제 어디서나 바로 확인</p>
             <a href="#request" class="btn btn-hero" data-ko="무료로 시작하기" data-en="Get Started Free">무료로 시작하기</a>
         </div>
     </section>
@@ -43,7 +44,11 @@
                 <div class="feature-card">
                     <div class="feature-icon">🔗</div>
                     <h3 data-ko="전용 접속 주소" data-en="Your Own Address">전용 접속 주소</h3>
-                    <p data-ko="yourname.cctvgo.app 전용 주소로 어디서든 내 CCTV에 접속" data-en="Access your CCTV at yourname.cctvgo.app from anywhere in the world.">yourname.cctvgo.app 전용 주소로 어디서든 내 CCTV에 접속</p>
+                    <div class="addr-demo" aria-hidden="true">
+                        <span class="addr-dot"></span><span class="addr-dot"></span><span class="addr-dot"></span>
+                        <span class="addr-text">myshop.cctvgo.app</span>
+                    </div>
+                    <p data-ko="나만의 주소로 어디서든 내 CCTV에 접속" data-en="Access your CCTV from anywhere at your own address.">나만의 주소로 어디서든 내 CCTV에 접속</p>
                 </div>
                 <div class="feature-card">
                     <div class="feature-icon">🎁</div>
@@ -53,7 +58,7 @@
                 <div class="feature-card">
                     <div class="feature-icon">📱</div>
                     <h3 data-ko="다채널 지원" data-en="Multi-Channel">다채널 지원</h3>
-                    <p data-ko="PC에서 4채널 동시 보기, 모바일에서도 최적화된 화면 제공" data-en="View up to 4 channels on PC, with an optimized mobile view included.">PC에서 4채널 동시 보기, 모바일에서도 최적화된 화면 제공</p>
+                    <p data-ko="PC에서 여러 채널 동시 보기, 모바일에서도 최적화된 화면 제공" data-en="View multiple channels at once on PC, with an optimized mobile view included.">PC에서 여러 채널 동시 보기, 모바일에서도 최적화된 화면 제공</p>
                 </div>
             </div>
         </div>
@@ -79,6 +84,34 @@
                     <div class="step-num">3</div>
                     <h3 data-ko="접속" data-en="Watch">접속</h3>
                     <p data-ko="yourname.cctvgo.app으로 어디서든 CCTV를 확인하세요" data-en="Access your CCTV from anywhere at yourname.cctvgo.app.">yourname.cctvgo.app으로 어디서든 CCTV를 확인하세요</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="faq" id="faq">
+        <div class="container">
+            <h2 class="section-title" data-ko="자주 묻는 질문" data-en="FAQ">자주 묻는 질문</h2>
+            <div class="faq-list">
+                <div class="faq-item">
+                    <h4 data-ko="Q. 어떤 CCTV에서 사용할 수 있나요?" data-en="Q. What cameras are supported?">Q. 어떤 CCTV에서 사용할 수 있나요?</h4>
+                    <p data-ko="RTSP 주소를 지원하는 IP카메라, DVR, NVR이면 사용할 수 있습니다." data-en="Any IP camera, DVR, or NVR that supports an RTSP address.">RTSP 주소를 지원하는 IP카메라, DVR, NVR이면 사용할 수 있습니다.</p>
+                </div>
+                <div class="faq-item">
+                    <h4 data-ko="Q. PC를 계속 켜두어야 하나요?" data-en="Q. Does my PC need to stay on?">Q. PC를 계속 켜두어야 하나요?</h4>
+                    <p data-ko="네. CCTVGO가 설치된 PC가 켜져 있고, 인터넷에 연결되어 실행 중이어야 외부에서 접속할 수 있습니다." data-en="Yes. The PC running CCTVGO must stay powered on and connected to the internet for remote access to work.">네. CCTVGO가 설치된 PC가 켜져 있고, 인터넷에 연결되어 실행 중이어야 외부에서 접속할 수 있습니다.</p>
+                </div>
+                <div class="faq-item">
+                    <h4 data-ko="Q. 어떤 환경에서 실행되나요?" data-en="Q. What environment does it run on?">Q. 어떤 환경에서 실행되나요?</h4>
+                    <p data-ko="Windows PC에서 실행됩니다. 이미 NVR을 구동 중인 PC에 함께 설치하는 것을 권장합니다." data-en="Runs on Windows PCs. We recommend installing it on the PC already running your NVR.">Windows PC에서 실행됩니다. 이미 NVR을 구동 중인 PC에 함께 설치하는 것을 권장합니다.</p>
+                </div>
+                <div class="faq-item">
+                    <h4 data-ko="Q. 카메라는 몇 대까지 연결할 수 있나요?" data-en="Q. How many cameras can I connect?">Q. 카메라는 몇 대까지 연결할 수 있나요?</h4>
+                    <p data-ko="연결한 카메라 수에 맞춰 화면이 자동으로 배치됩니다. 다만 PC 사양에 따라 원활하게 볼 수 있는 채널 수가 달라질 수 있습니다." data-en="The screen layout automatically adjusts to the number of cameras. The recommended number of channels may vary depending on your PC's performance.">연결한 카메라 수에 맞춰 화면이 자동으로 배치됩니다. 다만 PC 사양에 따라 원활하게 볼 수 있는 채널 수가 달라질 수 있습니다.</p>
+                </div>
+                <div class="faq-item">
+                    <h4 data-ko="Q. 구매 후 기술지원을 받을 수 있나요?" data-en="Q. Is technical support provided?">Q. 구매 후 기술지원을 받을 수 있나요?</h4>
+                    <p data-ko="설치형 완제품으로 제공되며, 별도의 기술지원은 제공되지 않습니다. 설치 안내는 홈페이지를 참고해주세요." data-en="This is provided as self-installed, ready-to-use software with no dedicated technical support. Please refer to this site for installation guidance.">설치형 완제품으로 제공되며, 별도의 기술지원은 제공되지 않습니다. 설치 안내는 홈페이지를 참고해주세요.</p>
                 </div>
             </div>
         </div>
@@ -112,7 +145,7 @@
                 </div>
             </form>
 
-            <p class="disclaimer" data-ko="본 제품은 설치형 소프트웨어로, 기술지원은 제공되지 않습니다. 가정용 또는 개인용 용도로 권장됩니다." data-en="This is self-installed software. No technical support is provided. Recommended for personal or home use only.">본 제품은 설치형 소프트웨어로, 기술지원은 제공되지 않습니다. 가정용 또는 개인용 용도로 권장됩니다.</p>
+            <p class="disclaimer" data-ko="본 제품은 설치형 소프트웨어로, 기술지원은 제공되지 않습니다. 가정 및 상업 공간(매장·사무실·부동산 등) 모두에서 사용하실 수 있습니다." data-en="This is self-installed software with no dedicated technical support. Suitable for both home and commercial use (stores, offices, property management, etc.).">본 제품은 설치형 소프트웨어로, 기술지원은 제공되지 않습니다. 가정 및 상업 공간(매장·사무실·부동산 등) 모두에서 사용하실 수 있습니다.</p>
             <div class="contact">
                 <span data-ko="문의" data-en="Contact">문의</span>
                 <a href="mailto:dagitul@gmail.com">dagitul@gmail.com</a>
