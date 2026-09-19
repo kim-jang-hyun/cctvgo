@@ -3,166 +3,234 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="포트포워딩, 공유기 설정 없이 어디서든 CCTV 영상을 확인하세요 | No port forwarding needed — watch your CCTV from anywhere">
-    <title>CCTVGO</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <meta name="description" content="기존 CCTV를 그대로 활용해 포트포워딩 없이 외부에서 CCTV 영상을 확인할 수 있는 CCTVGO">
+    <title>CCTVGO - 기존 CCTV를 외부에서 쉽게 확인하세요</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-    <nav class="nav">
-        <div class="nav-inner">
-            <a href="#" class="logo">CCTVGO</a>
-            <div class="nav-right">
-                <a href="#faq" class="nav-link" data-ko="자주 묻는 질문" data-en="FAQ">자주 묻는 질문</a>
-                <button class="lang-btn" id="langBtn" onclick="toggleLang()">EN</button>
-                <a href="#request" class="btn btn-nav" data-ko="무료 신청" data-en="Get Started">무료 신청</a>
-            </div>
+<header>
+  <div class="container nav">
+    <a href="#" class="logo">CCTV<span>GO</span></a>
+    <div class="nav-right">
+      <a href="#faq" class="nav-link" data-ko="자주 묻는 질문" data-en="FAQ">자주 묻는 질문</a>
+      <button class="lang-btn" id="langBtn" onclick="toggleLang()" type="button">EN</button>
+      <a href="#request" class="nav-cta" data-ko="무료 신청" data-en="Get Started">무료 신청</a>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <section class="hero">
+    <div class="container hero-stack">
+      <div class="hero-copy">
+        <div class="badge" data-ko="📹 기존 CCTV 그대로" data-en="📹 Use Your Existing CCTV">📹 기존 CCTV 그대로</div>
+        <h1 data-ko="지금 설치된 CCTV를<br><span class=&quot;blue&quot;>외부에서도</span> 쉽게 보세요." data-en="Watch Your Installed CCTV<br><span class=&quot;blue&quot;>From Anywhere</span>, Easily.">
+          지금 설치된 CCTV를<br>
+          <span class="blue">외부에서도</span> 쉽게 보세요.
+        </h1>
+        <p data-ko="포트포워딩이나 복잡한 공유기 설정 없이, 기존 CCTV를 활용해 PC와 스마트폰에서 CCTV 영상을 확인할 수 있습니다." data-en="No port forwarding or complicated router settings. Use your existing CCTV to check the footage from your PC or smartphone.">
+          포트포워딩이나 복잡한 공유기 설정 없이,
+          기존 CCTV를 활용해 PC와 스마트폰에서 CCTV 영상을 확인할 수 있습니다.
+        </p>
+        <div class="buttons">
+          <a class="btn btn-primary" href="#request" data-ko="🚀 무료로 시작하기" data-en="🚀 Get Started Free">🚀 무료로 시작하기</a>
+          <a class="btn btn-secondary" href="#features" data-ko="기능 알아보기" data-en="See Features">기능 알아보기</a>
         </div>
-    </nav>
+      </div>
 
-    <section class="hero">
-        <div class="hero-inner">
-            <div class="hero-badge" data-ko="무료 베타 서비스 중" data-en="Free Beta">무료 베타 서비스 중</div>
-            <h1 data-ko="복잡한 포트포워딩 없이<br>내 CCTV를 어디서든 확인하세요" data-en="No Complicated Port Forwarding.<br>Watch Your CCTV, Anywhere.">복잡한 포트포워딩 없이<br>내 CCTV를 어디서든 확인하세요</h1>
-            <p class="hero-sub" data-ko="설치 한 번으로 스마트폰과 PC에서<br>언제 어디서나 바로 확인" data-en="One simple install.<br>Access anytime from your smartphone or PC.">설치 한 번으로 스마트폰과 PC에서<br>언제 어디서나 바로 확인</p>
-            <a href="#request" class="btn btn-hero" data-ko="무료로 시작하기" data-en="Get Started Free">무료로 시작하기</a>
+      <div class="hero-card">
+        <img class="hero-shot" src="app_screen_shot.png" alt="CCTVGO 실행 화면" data-alt-ko="CCTVGO 실행 화면" data-alt-en="CCTVGO app screen">
+      </div>
+    </div>
+  </section>
+
+  <section class="problem">
+    <div class="container">
+      <div class="section-head">
+        <div class="eyebrow">WHY CCTVGO?</div>
+        <h2 data-ko="이런 불편함 때문에 만들었습니다." data-en="We built this to solve a real headache.">이런 불편함 때문에 만들었습니다.</h2>
+        <p data-ko="새로운 CCTV를 사지 않고, 지금 가지고 있는 장비를 활용할 수 있도록." data-en="So you can use the equipment you already have, without buying new CCTV.">새로운 CCTV를 사지 않고, 지금 가지고 있는 장비를 활용할 수 있도록.</p>
+      </div>
+      <div class="quote-box" data-ko="&quot;가게에 있는 CCTV를 집에서도 보고 싶은데&hellip;&quot;<br>&quot;지금 설치된 CCTV를 그대로 사용하고 싶은데&hellip;&quot;<br>&quot;<strong>복잡한 네트워크 설정은 하기 싫은데&hellip;</strong>&quot;" data-en="&quot;I wish I could watch my store&#39;s CCTV from home&hellip;&quot;<br>&quot;I want to keep using the CCTV I already installed&hellip;&quot;<br>&quot;<strong>But I don&#39;t want to deal with complicated network settings&hellip;</strong>&quot;">
+        "가게에 있는 CCTV를 집에서도 보고 싶은데…"<br>
+        "지금 설치된 CCTV를 그대로 사용하고 싶은데…"<br>
+        "<strong>복잡한 네트워크 설정은 하기 싫은데…</strong>"
+      </div>
+    </div>
+  </section>
+
+  <section id="features">
+    <div class="container">
+      <div class="section-head">
+        <div class="eyebrow">FEATURES</div>
+        <h2 data-ko="필요한 것만 간단하게" data-en="Just what you need, kept simple">필요한 것만 간단하게</h2>
+        <p data-ko="CCTVGO는 기존 CCTV를 외부에서 확인하는 데 집중합니다." data-en="CCTVGO focuses on letting you check your existing CCTV remotely.">CCTVGO는 기존 CCTV를 외부에서 확인하는 데 집중합니다.</p>
+      </div>
+
+      <div class="features">
+        <article class="feature">
+          <div class="icon">🌐</div>
+          <h3 data-ko="포트포워딩 없이" data-en="No Port Forwarding">포트포워딩 없이</h3>
+          <p data-ko="복잡한 공유기 설정을 최소화하고 외부에서 CCTV에 접속할 수 있습니다." data-en="Access your CCTV remotely with minimal router configuration.">복잡한 공유기 설정을 최소화하고 외부에서 CCTV에 접속할 수 있습니다.</p>
+        </article>
+        <article class="feature">
+          <div class="icon">📷</div>
+          <h3 data-ko="기존 CCTV 활용" data-en="Use Your Existing CCTV">기존 CCTV 활용</h3>
+          <p data-ko="RTSP를 지원하는 IP카메라, DVR, NVR 등을 활용할 수 있습니다." data-en="Works with any IP camera, DVR, or NVR that supports RTSP.">RTSP를 지원하는 IP카메라, DVR, NVR 등을 활용할 수 있습니다.</p>
+        </article>
+        <article class="feature">
+          <div class="icon">📱</div>
+          <h3 data-ko="PC와 스마트폰" data-en="PC & Smartphone">PC와 스마트폰</h3>
+          <p data-ko="별도의 전용 앱 없이 웹브라우저에서 CCTV 영상을 확인할 수 있습니다." data-en="Check the footage right in your web browser — no dedicated app needed.">별도의 전용 앱 없이 웹브라우저에서 CCTV 영상을 확인할 수 있습니다.</p>
+        </article>
+        <article class="feature">
+          <div class="icon">▦</div>
+          <h3 data-ko="여러 채널 동시 확인" data-en="Multi-Channel View">여러 채널 동시 확인</h3>
+          <p data-ko="PC에서는 여러 대의 CCTV를 한 화면에서 확인할 수 있습니다." data-en="View multiple CCTV feeds at once on your PC.">PC에서는 여러 대의 CCTV를 한 화면에서 확인할 수 있습니다.</p>
+        </article>
+        <article class="feature">
+          <div class="icon">💳</div>
+          <h3 data-ko="월 이용료 없이" data-en="No Monthly Fees">월 이용료 없이</h3>
+          <p data-ko="현재 무료 베타 서비스로 운영하고 있습니다." data-en="Currently offered as a free beta service.">현재 무료 베타 서비스로 운영하고 있습니다.</p>
+        </article>
+        <article class="feature">
+          <div class="icon">🔗</div>
+          <h3 data-ko="나만의 접속 주소" data-en="Your Own Address">나만의 접속 주소</h3>
+          <p data-ko="예: myshop.cctvgo.app 형태의 주소로 CCTV에 접속할 수 있습니다." data-en="Access your CCTV at an address like myshop.cctvgo.app.">예: myshop.cctvgo.app 형태의 주소로 CCTV에 접속할 수 있습니다.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="container">
+      <div class="section-head">
+        <div class="eyebrow">HOW IT WORKS</div>
+        <h2 data-ko="사용 방법도 간단합니다." data-en="Getting started is simple too.">사용 방법도 간단합니다.</h2>
+      </div>
+
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <h3 data-ko="CCTVGO 신청" data-en="Sign Up">CCTVGO 신청</h3>
+          <p data-ko="서비스를 신청하고 필요한 정보를 입력합니다." data-en="Request the service and enter the required information.">서비스를 신청하고 필요한 정보를 입력합니다.</p>
         </div>
-    </section>
-
-    <section class="features">
-        <div class="container">
-            <h2 class="section-title" data-ko="왜 CCTVGO인가요?" data-en="Why CCTVGO?">왜 CCTVGO인가요?</h2>
-            <div class="features-grid">
-                <div class="feature-card">
-                    <div class="feature-icon">⚡</div>
-                    <h3 data-ko="쉬운 설치" data-en="Easy Setup">쉬운 설치</h3>
-                    <p data-ko="프로그램을 받아 더블클릭 한 번. 복잡한 설정 없이 바로 시작" data-en="Just download and double-click. No complex configuration needed.">프로그램을 받아 더블클릭 한 번. 복잡한 설정 없이 바로 시작</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">🔗</div>
-                    <h3 data-ko="전용 접속 주소" data-en="Your Own Address">전용 접속 주소</h3>
-                    <div class="addr-demo" aria-hidden="true">
-                        <span class="addr-dot"></span><span class="addr-dot"></span><span class="addr-dot"></span>
-                        <span class="addr-text">myshop.cctvgo.app</span>
-                    </div>
-                    <p data-ko="나만의 주소로 어디서든 내 CCTV에 접속" data-en="Access your CCTV from anywhere at your own address.">나만의 주소로 어디서든 내 CCTV에 접속</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">🎁</div>
-                    <h3 data-ko="완전 무료" data-en="Completely Free">완전 무료</h3>
-                    <p data-ko="내 PC에서 직접 운영. 별도 서버나 월 요금이 없습니다" data-en="Runs on your own PC. No server fees, no monthly subscription.">내 PC에서 직접 운영. 별도 서버나 월 요금이 없습니다</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">📱</div>
-                    <h3 data-ko="다채널 지원" data-en="Multi-Channel">다채널 지원</h3>
-                    <p data-ko="PC에서 여러 채널 동시 보기, 모바일에서도 최적화된 화면 제공" data-en="View multiple channels at once on PC, with an optimized mobile view included.">PC에서 여러 채널 동시 보기, 모바일에서도 최적화된 화면 제공</p>
-                </div>
-            </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <h3 data-ko="프로그램 설치" data-en="Install the Program">프로그램 설치</h3>
+          <p data-ko="CCTV가 연결된 Windows PC에 프로그램을 설치합니다." data-en="Install the program on the Windows PC connected to your CCTV.">CCTV가 연결된 Windows PC에 프로그램을 설치합니다.</p>
         </div>
-    </section>
-
-    <section class="how">
-        <div class="container">
-            <h2 class="section-title" data-ko="이렇게 사용하세요" data-en="How It Works">이렇게 사용하세요</h2>
-            <div class="steps">
-                <div class="step">
-                    <div class="step-num">1</div>
-                    <h3 data-ko="신청" data-en="Request">신청</h3>
-                    <p data-ko="이메일과 원하는 접속 주소를 입력해 신청하세요" data-en="Enter your email and desired subdomain below.">이메일과 원하는 접속 주소를 입력해 신청하세요</p>
-                </div>
-                <div class="step-arrow">→</div>
-                <div class="step">
-                    <div class="step-num">2</div>
-                    <h3 data-ko="설치" data-en="Install">설치</h3>
-                    <p data-ko="이메일로 전송된 패키지를 받아 PC에서 실행하세요" data-en="Download the package we send to your email and run it on your PC.">이메일로 전송된 패키지를 받아 PC에서 실행하세요</p>
-                </div>
-                <div class="step-arrow">→</div>
-                <div class="step">
-                    <div class="step-num">3</div>
-                    <h3 data-ko="접속" data-en="Watch">접속</h3>
-                    <p data-ko="yourname.cctvgo.app으로 어디서든 CCTV를 확인하세요" data-en="Access your CCTV from anywhere at yourname.cctvgo.app.">yourname.cctvgo.app으로 어디서든 CCTV를 확인하세요</p>
-                </div>
-            </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <h3 data-ko="주소로 접속" data-en="Access via Your Address">주소로 접속</h3>
+          <p data-ko="제공된 주소를 이용해 PC나 스마트폰에서 확인합니다." data-en="Use the provided address to check in from your PC or smartphone.">제공된 주소를 이용해 PC나 스마트폰에서 확인합니다.</p>
         </div>
-    </section>
+      </div>
 
-    <section class="faq" id="faq">
-        <div class="container">
-            <h2 class="section-title" data-ko="자주 묻는 질문" data-en="FAQ">자주 묻는 질문</h2>
-            <div class="faq-list">
-                <div class="faq-item">
-                    <h4 data-ko="Q. 어떤 CCTV에서 사용할 수 있나요?" data-en="Q. What cameras are supported?">Q. 어떤 CCTV에서 사용할 수 있나요?</h4>
-                    <p data-ko="RTSP 주소를 지원하는 IP카메라, DVR, NVR이면 사용할 수 있습니다." data-en="Any IP camera, DVR, or NVR that supports an RTSP address.">RTSP 주소를 지원하는 IP카메라, DVR, NVR이면 사용할 수 있습니다.</p>
-                </div>
-                <div class="faq-item">
-                    <h4 data-ko="Q. PC를 계속 켜두어야 하나요?" data-en="Q. Does my PC need to stay on?">Q. PC를 계속 켜두어야 하나요?</h4>
-                    <p data-ko="네. CCTVGO가 설치된 PC가 켜져 있고, 인터넷에 연결되어 실행 중이어야 외부에서 접속할 수 있습니다." data-en="Yes. The PC running CCTVGO must stay powered on and connected to the internet for remote access to work.">네. CCTVGO가 설치된 PC가 켜져 있고, 인터넷에 연결되어 실행 중이어야 외부에서 접속할 수 있습니다.</p>
-                </div>
-                <div class="faq-item">
-                    <h4 data-ko="Q. 어떤 환경에서 실행되나요?" data-en="Q. What environment does it run on?">Q. 어떤 환경에서 실행되나요?</h4>
-                    <p data-ko="Windows PC에서 실행됩니다. 이미 NVR을 구동 중인 PC에 함께 설치하는 것을 권장합니다." data-en="Runs on Windows PCs. We recommend installing it on the PC already running your NVR.">Windows PC에서 실행됩니다. 이미 NVR을 구동 중인 PC에 함께 설치하는 것을 권장합니다.</p>
-                </div>
-                <div class="faq-item">
-                    <h4 data-ko="Q. 카메라는 몇 대까지 연결할 수 있나요?" data-en="Q. How many cameras can I connect?">Q. 카메라는 몇 대까지 연결할 수 있나요?</h4>
-                    <p data-ko="연결한 카메라 수에 맞춰 화면이 자동으로 배치됩니다. 다만 PC 사양에 따라 원활하게 볼 수 있는 채널 수가 달라질 수 있습니다." data-en="The screen layout automatically adjusts to the number of cameras. The recommended number of channels may vary depending on your PC's performance.">연결한 카메라 수에 맞춰 화면이 자동으로 배치됩니다. 다만 PC 사양에 따라 원활하게 볼 수 있는 채널 수가 달라질 수 있습니다.</p>
-                </div>
-                <div class="faq-item">
-                    <h4 data-ko="Q. 구매 후 기술지원을 받을 수 있나요?" data-en="Q. Is technical support provided?">Q. 구매 후 기술지원을 받을 수 있나요?</h4>
-                    <p data-ko="설치형 완제품으로 제공되며, 별도의 기술지원은 제공되지 않습니다. 설치 안내는 홈페이지를 참고해주세요." data-en="This is provided as self-installed, ready-to-use software with no dedicated technical support. Please refer to this site for installation guidance.">설치형 완제품으로 제공되며, 별도의 기술지원은 제공되지 않습니다. 설치 안내는 홈페이지를 참고해주세요.</p>
-                </div>
-            </div>
+      <div style="text-align:center;margin-top:35px;color:#6b7280;">
+        <span data-ko="예시" data-en="Example">예시</span>&nbsp;&nbsp; <strong style="color:#111827;">myshop.cctvgo.app</strong>
+      </div>
+    </div>
+  </section>
+
+  <section class="audience">
+    <div class="container">
+      <div class="section-head">
+        <div class="eyebrow">WHO IS IT FOR?</div>
+        <h2 data-ko="이런 분께 추천합니다." data-en="Who is this for?">이런 분께 추천합니다.</h2>
+        <p data-ko="새로운 CCTV보다, 지금 있는 CCTV를 활용하고 싶은 분" data-en="For those who'd rather use their existing CCTV than buy a new one">새로운 CCTV보다, 지금 있는 CCTV를 활용하고 싶은 분</p>
+      </div>
+      <div class="audience-list">
+        <div class="audience-item" data-ko="✔ 매장 CCTV를 집에서 확인하고 싶은 분" data-en="✔ Want to check store CCTV from home">✔ 매장 CCTV를 집에서 확인하고 싶은 분</div>
+        <div class="audience-item" data-ko="✔ 기존 CCTV를 그대로 사용하고 싶은 분" data-en="✔ Want to keep using their existing CCTV">✔ 기존 CCTV를 그대로 사용하고 싶은 분</div>
+        <div class="audience-item" data-ko="✔ CCTV를 외부에서 간편하게 확인하고 싶은 분" data-en="✔ Want an easy way to check CCTV remotely">✔ CCTV를 외부에서 간편하게 확인하고 싶은 분</div>
+        <div class="audience-item" data-ko="✔ 별도의 월 이용료 없이 사용하고 싶은 분" data-en="✔ Want to avoid monthly subscription fees">✔ 별도의 월 이용료 없이 사용하고 싶은 분</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="faq" id="faq">
+    <div class="container">
+      <div class="section-head">
+        <div class="eyebrow">FAQ</div>
+        <h2 data-ko="자주 묻는 질문" data-en="Frequently Asked Questions">자주 묻는 질문</h2>
+      </div>
+      <div class="faq-list">
+        <div class="faq-item">
+          <h4 data-ko="Q. 어떤 CCTV에서 사용할 수 있나요?" data-en="Q. What cameras are supported?">Q. 어떤 CCTV에서 사용할 수 있나요?</h4>
+          <p data-ko="RTSP 주소를 지원하는 IP카메라, DVR, NVR이면 사용할 수 있습니다." data-en="Any IP camera, DVR, or NVR that supports an RTSP address.">RTSP 주소를 지원하는 IP카메라, DVR, NVR이면 사용할 수 있습니다.</p>
         </div>
-    </section>
-
-    <section class="request" id="request">
-        <div class="container">
-            <h2 class="section-title" data-ko="지금 무료로 신청하세요" data-en="Get Started for Free">지금 무료로 신청하세요</h2>
-            <p class="request-sub" data-ko="신청 후 2일 이내 패키지를 이메일로 보내드립니다" data-en="We'll send your package by email within 2 business days.">신청 후 2일 이내 패키지를 이메일로 보내드립니다</p>
-
-            <!-- Formspree: formspree.io 무료 가입 후 아래 YOUR_FORM_ID를 실제 ID로 교체하세요 -->
-            <form class="request-form" id="requestForm" action="https://formsubmit.co/ajax/dagitul@gmail.com" method="POST">
-                <div class="form-group">
-                    <label data-ko="이메일 주소" data-en="Email Address">이메일 주소</label>
-                    <input type="email" name="email" required placeholder="you@example.com">
-                </div>
-                <div class="form-group">
-                    <label data-ko="원하는 접속 주소" data-en="Desired Subdomain">원하는 접속 주소</label>
-                    <div class="subdomain-row">
-                        <input type="text" name="subdomain" required placeholder="yourname" pattern="[a-z0-9][a-z0-9\-]*[a-z0-9]" minlength="2">
-                        <span class="subdomain-suffix">.cctvgo.app</span>
-                    </div>
-                    <small data-ko="영문 소문자, 숫자, 하이픈(-)만 사용 가능" data-en="Lowercase letters, numbers, and hyphens only.">영문 소문자, 숫자, 하이픈(-)만 사용 가능</small>
-                </div>
-                <button type="submit" class="btn btn-submit" data-ko="무료 신청하기" data-en="Request Free Access">무료 신청하기</button>
-                <div class="form-success" id="formSuccess" hidden>
-                    <span data-ko="✅ 신청이 완료됐습니다. 2일 이내 이메일을 확인해주세요." data-en="✅ Request received! Please check your email within 2 days.">✅ 신청이 완료됐습니다. 2일 이내 이메일을 확인해주세요.</span>
-                </div>
-                <div class="form-error" id="formError" hidden>
-                    <span data-ko="⚠️ 오류가 발생했습니다. dagitul@gmail.com으로 직접 문의해주세요." data-en="⚠️ Something went wrong. Please email dagitul@gmail.com directly.">⚠️ 오류가 발생했습니다. dagitul@gmail.com으로 직접 문의해주세요.</span>
-                </div>
-            </form>
-
-            <p class="disclaimer" data-ko="본 제품은 설치형 소프트웨어로, 기술지원은 제공되지 않습니다. 가정 및 상업 공간(매장·사무실·부동산 등) 모두에서 사용하실 수 있습니다." data-en="This is self-installed software with no dedicated technical support. Suitable for both home and commercial use (stores, offices, property management, etc.).">본 제품은 설치형 소프트웨어로, 기술지원은 제공되지 않습니다. 가정 및 상업 공간(매장·사무실·부동산 등) 모두에서 사용하실 수 있습니다.</p>
-            <div class="contact">
-                <span data-ko="문의" data-en="Contact">문의</span>
-                <a href="mailto:dagitul@gmail.com">dagitul@gmail.com</a>
-                <span class="contact-sep">·</span>
-                <a href="https://pf.kakao.com/_yWPxaX/friend" target="_blank" data-ko="카카오톡 채널" data-en="KakaoTalk">카카오톡 채널</a>
-            </div>
+        <div class="faq-item">
+          <h4 data-ko="Q. PC를 계속 켜두어야 하나요?" data-en="Q. Does my PC need to stay on?">Q. PC를 계속 켜두어야 하나요?</h4>
+          <p data-ko="네. CCTVGO가 설치된 PC가 켜져 있고, 인터넷에 연결되어 실행 중이어야 외부에서 접속할 수 있습니다." data-en="Yes. The PC running CCTVGO must stay powered on and connected to the internet for remote access to work.">네. CCTVGO가 설치된 PC가 켜져 있고, 인터넷에 연결되어 실행 중이어야 외부에서 접속할 수 있습니다.</p>
         </div>
-    </section>
-
-    <footer class="footer">
-        <div class="container">
-            <div class="footer-logo">CCTVGO</div>
-            <p class="footer-notice" data-ko="본 소프트웨어는 FFmpeg를 포함하며, FFmpeg는 LGPL/GPL 라이선스 하에 배포됩니다." data-en="This software includes FFmpeg, distributed under the LGPL/GPL license.">본 소프트웨어는 FFmpeg를 포함하며, FFmpeg는 LGPL/GPL 라이선스 하에 배포됩니다.</p>
-            <p class="footer-copy">© 2026 CCTVGO. All rights reserved.</p>
+        <div class="faq-item">
+          <h4 data-ko="Q. 어떤 환경에서 실행되나요?" data-en="Q. What environment does it run on?">Q. 어떤 환경에서 실행되나요?</h4>
+          <p data-ko="Windows PC에서 실행됩니다. 이미 NVR을 구동 중인 PC에 함께 설치하는 것을 권장합니다." data-en="Runs on Windows PCs. We recommend installing it on the PC already running your NVR.">Windows PC에서 실행됩니다. 이미 NVR을 구동 중인 PC에 함께 설치하는 것을 권장합니다.</p>
         </div>
-    </footer>
+        <div class="faq-item">
+          <h4 data-ko="Q. 카메라는 몇 대까지 연결할 수 있나요?" data-en="Q. How many cameras can I connect?">Q. 카메라는 몇 대까지 연결할 수 있나요?</h4>
+          <p data-ko="현재 버전은 최대 4대까지 연결할 수 있으며, 연결한 카메라 수에 맞춰 화면이 자동으로 배치됩니다." data-en="The current version supports up to 4 cameras, and the screen layout automatically adjusts to the number of cameras connected.">현재 버전은 최대 4대까지 연결할 수 있으며, 연결한 카메라 수에 맞춰 화면이 자동으로 배치됩니다.</p>
+        </div>
+        <div class="faq-item">
+          <h4 data-ko="Q. 구매 후 기술지원을 받을 수 있나요?" data-en="Q. Is technical support provided?">Q. 구매 후 기술지원을 받을 수 있나요?</h4>
+          <p data-ko="설치형 완제품으로 제공되며, 별도의 기술지원은 제공되지 않습니다. 설치 안내는 홈페이지를 참고해주세요." data-en="This is provided as self-installed, ready-to-use software with no dedicated technical support. Please refer to this site for installation guidance.">설치형 완제품으로 제공되며, 별도의 기술지원은 제공되지 않습니다. 설치 안내는 홈페이지를 참고해주세요.</p>
+        </div>
+      </div>
+    </div>
+  </section>
 
-    <script src="script.js"></script>
+  <section class="request" id="request">
+    <div class="container">
+      <div class="section-head">
+        <div class="eyebrow">GET STARTED</div>
+        <h2 data-ko="지금 무료로 신청하세요" data-en="Get Started for Free">지금 무료로 신청하세요</h2>
+      </div>
+      <p class="request-sub" data-ko="신청 후 2일 이내 패키지를 이메일로 보내드립니다" data-en="We'll send your package by email within 2 business days.">신청 후 2일 이내 패키지를 이메일로 보내드립니다</p>
+
+      <form class="request-form" id="requestForm" action="https://formsubmit.co/ajax/dagitul@gmail.com" method="POST">
+        <div class="form-group">
+          <label data-ko="이메일 주소" data-en="Email Address">이메일 주소</label>
+          <input type="email" name="email" required placeholder="you@example.com">
+        </div>
+        <div class="form-group">
+          <label data-ko="원하는 접속 주소" data-en="Desired Subdomain">원하는 접속 주소</label>
+          <div class="subdomain-row">
+            <input type="text" name="subdomain" required placeholder="myshop" pattern="[a-z0-9][a-z0-9\-]*[a-z0-9]" minlength="2">
+            <span class="subdomain-suffix">.cctvgo.app</span>
+          </div>
+          <small data-ko="영문 소문자, 숫자, 하이픈(-)만 사용 가능" data-en="Lowercase letters, numbers, and hyphens only.">영문 소문자, 숫자, 하이픈(-)만 사용 가능</small>
+        </div>
+        <button type="submit" class="btn-submit" data-ko="무료 신청하기" data-en="Request Free Access">무료 신청하기</button>
+        <div class="form-success" id="formSuccess" hidden>
+          <span data-ko="✅ 신청이 완료됐습니다. 2일 이내 이메일을 확인해주세요." data-en="✅ Request received! Please check your email within 2 days.">✅ 신청이 완료됐습니다. 2일 이내 이메일을 확인해주세요.</span>
+        </div>
+        <div class="form-error" id="formError" hidden>
+          <span data-ko="⚠️ 오류가 발생했습니다. dagitul@gmail.com으로 직접 문의해주세요." data-en="⚠️ Something went wrong. Please email dagitul@gmail.com directly.">⚠️ 오류가 발생했습니다. dagitul@gmail.com으로 직접 문의해주세요.</span>
+        </div>
+      </form>
+
+      <p class="disclaimer" data-ko="본 제품은 설치형 소프트웨어로, 기술지원은 제공되지 않습니다. 가정 및 상업 공간(매장·사무실·부동산 등) 모두에서 사용하실 수 있습니다." data-en="This is self-installed software with no dedicated technical support. Suitable for both home and commercial use (stores, offices, property management, etc.).">본 제품은 설치형 소프트웨어로, 기술지원은 제공되지 않습니다. 가정 및 상업 공간(매장·사무실·부동산 등) 모두에서 사용하실 수 있습니다.</p>
+      <div class="contact">
+        <span data-ko="문의" data-en="Contact">문의</span>
+        <a href="mailto:dagitul@gmail.com">dagitul@gmail.com</a>
+        <span class="contact-sep">·</span>
+        <a href="https://pf.kakao.com/_yWPxaX/friend" target="_blank" data-ko="카카오톡 채널" data-en="KakaoTalk">카카오톡 채널</a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="container footer-inner">
+    <div><strong style="color:#374151;">CCTVGO</strong> · <span data-ko="기존 CCTV를 외부에서 쉽게" data-en="Your existing CCTV, from anywhere">기존 CCTV를 외부에서 쉽게</span></div>
+    <div>© 2026 CCTVGO. All rights reserved.</div>
+  </div>
+</footer>
+
+<script src="script.js"></script>
 </body>
 </html>
