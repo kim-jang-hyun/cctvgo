@@ -1,6 +1,7 @@
 <template>
   <div class="page-wrapper">
     <h2>실시간 CCTV 스트리밍</h2>
+    <router-link to="/finder" class="finder-link">카메라 주소 찾기</router-link>
 
     <!-- 모바일: 한 화면에 1개 전체 화면 + 카메라 선택 리스트 -->
     <template v-if="isMobile && cameraList">
@@ -239,6 +240,7 @@ onUnmounted(() => {
 <style scoped>
 /* --- 페이지 --- */
 .page-wrapper {
+  position: relative;
   width: 100%;
   height: 100dvh;
   margin: 0;
@@ -256,6 +258,19 @@ h2 {
   white-space: nowrap;
   overflow: visible;
   text-align: center;
+}
+
+.finder-link {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  z-index: 10;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: #fff;
+  background: rgba(0, 123, 255, 0.9);
+  border-radius: 4px;
+  text-decoration: none;
 }
 
 /* --- 데스크톱 그리드 --- */
