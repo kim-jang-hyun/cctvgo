@@ -177,3 +177,64 @@ test('save: 공인 IP, rtsp 아님, 쉼표/공백 포함, 잘못된 mode/replace
         assert.equal(fs.readFileSync(app.cctvPath, 'utf8'), before);
     } finally { await app.close(); }
 });
+
+test('probe: 아이디에 제어문자/따옴표가 있으면 400 이고 findStream 을 부르지 않는다', async () => {
+    let called = 0;
+    const app = await startApp({ findStream: async () => { called++; return { status: 'found' }; } });
+    try {
+        for (const username of ['ad"min', 'ad\r\nX: 1', 'a\x00b', 'a\x7fb', 'a\nb']) {
+            const res = await app.call('POST', '/api/finder/probe', { ip: '192.168.0.5', username, password: 'pw' });
+            assert.equal(res.status, 400, JSON.stringify(username));
+        }
+        assert.equal(called, 0);
+    } finally { await app.close(); }
+});
+
+test('save: 금지 문자(" ^ < > | 제어문자)와 authority 의 @ 2개 이상은 400 이고 파일은 그대로, & 는 허용', async () => {
+    const app = await startApp();
+    const before = fs.readFileSync(app.cctvPath, 'utf8');
+    try {
+        for (const url of [
+            'rtsp://a:b@192.168.0.9:554/x"y',
+            'rtsp://a:b@192.168.0.9:554/x^y',
+            'rtsp://a:b@192.168.0.9:554/x<y',
+            'rtsp://a:b@192.168.0.9:554/x>y',
+            'rtsp://a:b@192.168.0.9:554/x|y',
+            'rtsp://a:b@192.168.0.9:554/x\x01y',
+            'rtsp://a:b@192.168.0.9:554/x\x7fy',
+            'rtsp://x@8.8.8.8:1@192.168.0.5/live',
+            'rtsp://a:b@c@192.168.0.5:554/live',
+        ]) {
+            const res = await app.call('POST', '/api/finder/save', { url, name: 'n' });
+            assert.equal(res.status, 400, JSON.stringify(url));
+        }
+        assert.equal(fs.readFileSync(app.cctvPath, 'utf8'), before);
+        const ok = await app.call('POST', '/api/finder/save', { url: 'rtsp://a:b@192.168.0.9:554/cam/realmonitor?channel=1&subtype=0', name: 'n' });
+        assert.equal(ok.status, 200);
+        // 경로 쪽 @ 는 authority 가 아니므로 허용
+        const ok2 = await app.call('POST', '/api/finder/save', { url: 'rtsp://a:b@192.168.0.9:554/x@y', name: 'n2' });
+        assert.equal(ok2.status, 200);
+    } finally { await app.close(); }
+});
+
+test('기본 budget 은 baseDir 의 finder-budget.json 에 영속화된다 (주입한 budget 이 우선)', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cctvgo-routes-'));
+    const app = express();
+    app.use(express.json());
+    registerFinderRoutes(app, {
+        authMiddleware: (req, res, next) => next(),
+        baseDir: dir,
+        cctvPath: path.join(dir, 'cctv.txt'),
+        deps: { findStream: async a => { a.budget.recordFailure(a.host); return { status: 'auth_failed' }; } },
+    });
+    const server = await new Promise(resolve => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
+    try {
+        const res = await fetch(`http://127.0.0.1:${server.address().port}/api/finder/probe`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ip: '192.168.0.5' }),
+        });
+        assert.equal(res.status, 200);
+        const saved = JSON.parse(fs.readFileSync(path.join(dir, 'finder-budget.json'), 'utf8'));
+        assert.equal(saved['192.168.0.5'].count, 1);
+        assert.ok(!JSON.stringify(saved).includes('pw'));
+    } finally { await new Promise(r => { server.close(r); server.closeAllConnections && server.closeAllConnections(); }); }
+});
