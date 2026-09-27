@@ -1,4 +1,5 @@
 'use strict';
+const fs = require('fs');
 
 /**
  * 카메라 주소 찾기 안전장치 모음
@@ -28,13 +29,49 @@ function isPrivateIPv4(ip) {
     return false;
 }
 
-/** IP별 인증 실패 횟수. 마지막 실패로부터 lockMs가 지나면 초기화된다. */
+/**
+ * IP별 인증 실패 횟수. 마지막 실패로부터 lockMs가 지나면 초기화된다.
+ * persistPath 가 있으면 서비스를 재시작해도 30분 창이 유지되도록 파일({ ip: { count, last } })에 저장한다 (계정 잠금 방지).
+ */
 class AuthBudget {
-    constructor({ max = 2, lockMs = 30 * 60 * 1000, now = Date.now } = {}) {
+    constructor({ max = 2, lockMs = 30 * 60 * 1000, now = Date.now, persistPath = null } = {}) {
         this.max = max;
         this.lockMs = lockMs;
         this.now = now;
         this.map = new Map();
+        this.persistPath = persistPath;
+        if (persistPath) this._load();
+    }
+
+    _load() {
+        try {
+            const data = JSON.parse(fs.readFileSync(this.persistPath, 'utf8'));
+            if (!data || typeof data !== 'object' || Array.isArray(data)) return;
+            const t = this.now();
+            for (const [ip, e] of Object.entries(data)) {
+                if (!e || !Number.isInteger(e.count) || e.count < 1 || !Number.isFinite(e.last)) continue;
+                const last = Math.min(e.last, t);   // 시계가 되돌려졌어도 잠금이 무한정 늘어나지 않게 한다
+                if (t - last >= this.lockMs) continue;
+                this.map.set(ip, { count: e.count, last });
+            }
+        } catch (error) { /* 파일이 없거나 깨졌으면 빈 상태로 시작 */ }
+    }
+
+    /** best-effort 저장 (만료 항목 제외). 실패해도 예외를 내지 않고 경로 없이 한 줄만 남긴다. */
+    _save() {
+        if (!this.persistPath) return;
+        try {
+            const out = {};
+            for (const ip of Array.from(this.map.keys())) {
+                const e = this._entry(ip);
+                if (e) out[ip] = { count: e.count, last: e.last };
+            }
+            const tmp = this.persistPath + '.tmp';
+            fs.writeFileSync(tmp, JSON.stringify(out), 'utf8');
+            fs.renameSync(tmp, this.persistPath);
+        } catch (error) {
+            console.error('Finder 인증 실패 기록 저장 실패:', error.code || 'error');
+        }
     }
 
     _entry(ip) {
@@ -70,11 +107,12 @@ class AuthBudget {
         e.count += 1;
         e.last = this.now();
         this.map.set(ip, e);
+        this._save();
         return this.remaining(ip);
     }
 
     reset(ip) {
-        this.map.delete(ip);
+        if (this.map.delete(ip)) this._save();
     }
 }
 
