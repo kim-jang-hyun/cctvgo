@@ -58,8 +58,10 @@ async function findStream({
         const r = await describe({ host, port: rtspPort, path: p, username, password, timeoutMs: rtspTimeoutMs });
         tried.push({ kind: 'rtsp', target: `${rtspPort}${p}`, result: r.status === 'unreachable' ? `연결 실패(${r.reason})` : String(r.code) });
         noteHeaders(r.headers);
-        if (r.authSent && r.status === 'unauthorized') budget.recordFailure(host);
+        // 자격 증명을 보냈는데 성공/404(=인증은 통과)가 아니면 카메라가 로그인 실패로 셌을 수 있으니 보수적으로 1회 센다
+        // (401뿐 아니라 응답 없음/연결 끊김/해석 불가 포함)
         if (r.authSent && (r.status === 'ok' || r.status === 'not_found')) budget.reset(host);
+        else if (r.authSent) budget.recordFailure(host);
         return r;
     }
 
@@ -88,12 +90,15 @@ async function findStream({
         return finish('path_not_found');
     }
 
-    // --- 1) ONVIF ---
-    const on = await onvif.getStreamUris({
-        host, username, password, ports: settings.onvifPorts, servicePaths: settings.onvifServicePaths, timeoutMs: onvifTimeoutMs,
-    });
-    info.onvif = on.status === 'ok' ? `응답함 (프로파일 ${on.uris.length}개)` : on.status === 'auth_failed' ? '응답함, 인증 실패' : '응답 없음 또는 미지원';
-    tried.push({ kind: 'onvif', target: host, result: on.status });
+    // --- 1) ONVIF (계정이 없으면 시도하지 않는다: 빈 계정도 카메라에는 로그인 실패로 보인다) ---
+    const on = username
+        ? await onvif.getStreamUris({
+            host, username, password, ports: settings.onvifPorts, servicePaths: settings.onvifServicePaths, timeoutMs: onvifTimeoutMs,
+        })
+        : { status: 'skipped' };
+    info.onvif = on.status === 'ok' ? `응답함 (프로파일 ${on.uris.length}개)` : on.status === 'auth_failed' ? '응답함, 인증 실패'
+        : on.status === 'skipped' ? '시도 안 함 (계정 없음)' : '응답 없음 또는 미지원';
+    if (on.status !== 'skipped') tried.push({ kind: 'onvif', target: host, result: on.status });
 
     if (on.status === 'ok') {
         const verified = [];
@@ -105,6 +110,7 @@ async function findStream({
             const p = (u.pathname || '/') + (u.search || '');
             const r = await attempt(rtspPort, p);   // 카메라가 알려 준 주소라도 실제 접속을 확인한다
             if (r.status === 'ok') verified.push(candidate(rtspPort, p, 'onvif', item.name || item.token));
+            else if (r.status === 'unreachable') break;
         }
         if (verified.length) return finish('found', { candidates: verified });
     } else if (on.status === 'auth_failed') {
@@ -126,7 +132,7 @@ async function findStream({
     if (bogus.status === 'unauthorized' && !username) {
         return finish('auth_failed', { ambiguous: false });
     }
-    const strict = bogus.status !== 'unauthorized';   // 없는 경로에 401이 아니면 계정은 맞다
+    const strict = bogus.status === 'not_found';   // 없는 경로에 404 를 준 경우에만 계정이 맞다는 증거가 된다 (403/500/해석 불가는 증거 아님)
 
     for (const p of orderedPaths(settings, vendorHint)) {
         if (budget.isExhausted(host)) return finish('auth_failed', { ambiguous: true });

@@ -17,7 +17,10 @@ async function createMockRtsp({
     qop = false,
     validPaths = ['/stream1'],
     unknownPathStatus = 404,
+    pathOverrides = {}, // 특정 경로에 줄 코드 (인증 성공 후). 예: { '/a': 401 }
     requireAuth = true,
+    dropAuthed = false, // true 면 Authorization 을 실은 요청에는 응답 없이 연결을 끊는다
+    garbleAuthed = false, // true 면 Authorization 을 실은 요청에 RTSP 가 아닌 응답을 준다
     host = '127.0.0.1',
     port = 0,
 } = {}) {
@@ -66,6 +69,8 @@ async function createMockRtsp({
             const u = new URL(uri);
             const reqPath = u.pathname + u.search;
             const auth = headers['authorization'];
+            if (auth && dropAuthed) { state.requests.push({ method, path: reqPath, authed: true, code: 0 }); return socket.destroy(); }
+            if (auth && garbleAuthed) { state.requests.push({ method, path: reqPath, authed: true, code: 0 }); return socket.end('HTTP/1.1 200 nope\r\n\r\n'); }
 
             let code = 200;
             let extra = '';
@@ -76,6 +81,12 @@ async function createMockRtsp({
                 code = 401;
                 extra = challengeHeader();
                 state.failedAuth++;
+            } else if (pathOverrides[reqPath]) {
+                code = pathOverrides[reqPath];
+                if (code === 401) {
+                    extra = challengeHeader();
+                    state.failedAuth++;
+                }
             } else if (!validPaths.includes(reqPath)) {
                 code = unknownPathStatus;
                 if (code === 401) {

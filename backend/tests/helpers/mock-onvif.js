@@ -20,13 +20,18 @@ async function createMockOnvif({
         { token: 'p2', name: 'sub', path: '/onvif/profile2' },
     ],
     host = '127.0.0.1',
+    faultText = 'Sender not Authorized', // NotAuthorized 가 없는 비표준 문구를 주려면 바꾼다 (예: 'Authentication failed for user')
+    canonicalFault = true,               // false 면 ter:NotAuthorized 코드 없이 faultText 만 담은 Fault 를 돌려준다
+    mediaPaths = ['/onvif/media_service'], // 미디어 요청(GetProfiles/GetStreamUri)에 응답하는 경로. 그 외 경로는 404
 } = {}) {
-    const state = { requests: [], failedAuth: 0 };
+    // failedAuth: 자격 증명(Security 헤더)을 실은 요청이 거절된 횟수 / credentialed: 자격 증명을 실은 GetProfiles·GetStreamUri 횟수
+    const state = { requests: [], failedAuth: 0, credentialed: 0 };
     const wrap = inner => '<?xml version="1.0"?><s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" '
         + 'xmlns:tds="http://www.onvif.org/ver10/device/wsdl" xmlns:trt="http://www.onvif.org/ver10/media/wsdl" '
         + `xmlns:tt="http://www.onvif.org/ver10/schema"><s:Body>${inner}</s:Body></s:Envelope>`;
-    const notAuthorized = () => wrap('<s:Fault><s:Code><s:Value>s:Sender</s:Value><s:Subcode><s:Value>ter:NotAuthorized</s:Value></s:Subcode></s:Code>'
-        + '<s:Reason><s:Text xml:lang="en">Sender not Authorized</s:Text></s:Reason></s:Fault>');
+    const notAuthorized = () => wrap('<s:Fault><s:Code><s:Value>s:Sender</s:Value>'
+        + (canonicalFault ? '<s:Subcode><s:Value>ter:NotAuthorized</s:Value></s:Subcode>' : '') + '</s:Code>'
+        + `<s:Reason><s:Text xml:lang="en">${faultText}</s:Text></s:Reason></s:Fault>`);
 
     function authorized(body) {
         const pick = tag => {
@@ -51,7 +56,7 @@ async function createMockOnvif({
         req.on('end', () => {
             const op = (/<(?:\w+:)?(GetSystemDateAndTime|GetCapabilities|GetProfiles|GetStreamUri)\b/.exec(body) || [])[1];
             state.requests.push({ path: req.url, op });
-            if (req.method !== 'POST' || !['/onvif/device_service', '/onvif/media_service'].includes(req.url) || !op) {
+            if (req.method !== 'POST' || !['/onvif/device_service', ...mediaPaths].includes(req.url) || !op) {
                 res.writeHead(404);
                 return res.end();
             }
@@ -71,8 +76,10 @@ async function createMockOnvif({
                     + `<tt:XAddr>http://0.0.0.0:${server.address().port}/onvif/media_service</tt:XAddr>`
                     + '</tt:Media></tds:Capabilities></tds:GetCapabilitiesResponse>'));
             }
+            const hasCredentials = /<(?:\w+:)?UsernameToken\b/.test(body);
+            if (hasCredentials) state.credentialed++;
             if (requireAuth && !(anonymousProfiles && op === 'GetProfiles') && !authorized(body)) {
-                state.failedAuth++;
+                if (hasCredentials) state.failedAuth++;   // 자격 증명 없이 온 요청은 로그인 실패가 아니다
                 return send(400, notAuthorized());
             }
             if (op === 'GetProfiles') {

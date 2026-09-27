@@ -78,3 +78,51 @@ test('GetStreamUri만 인증을 요구하는 카메라도 틀린 비밀번호면
         assert.equal(cam.state.failedAuth, 1);
     } finally { await cam.close(); }
 });
+
+test('비표준 거절 문구여도 여러 포트/경로에 자격 증명을 보내지 않고 인증 요청 1번 만에 auth_failed', async () => {
+    const a = await createMockOnvif({ canonicalFault: false, faultText: 'Authentication failed for user' });
+    const b = await createMockOnvif({ canonicalFault: false, faultText: 'Authentication failed for user' });
+    try {
+        const r = await getStreamUris({
+            host: HOST, username: 'admin', password: 'wrong', ports: [a.port, b.port],
+            servicePaths: ['/onvif/device_service', '/onvif/device_service'],
+        });
+        assert.equal(r.status, 'auth_failed');
+        assert.equal(a.state.credentialed, 1);
+        assert.equal(a.state.failedAuth, 1);
+        assert.equal(b.state.credentialed, 0);
+        assert.equal(b.state.failedAuth, 0);
+    } finally { await a.close(); await b.close(); }
+});
+
+test('아이디가 비어 있으면 자격 증명 요청을 보내지 않고 unsupported', async () => {
+    const cam = await createMockOnvif();
+    try {
+        const r = await getStreamUris({ host: HOST, username: '', password: '', ports: [cam.port], servicePaths: SERVICE });
+        assert.deepEqual(r, { status: 'unsupported' });
+        assert.equal(cam.state.credentialed, 0);
+        assert.equal(cam.state.failedAuth, 0);
+    } finally { await cam.close(); }
+});
+
+test('존재하지 않는 미디어 경로(404)는 자격 증명 없이 건너뛰고 다음 경로에서 성공한다', async () => {
+    // Capabilities 는 /onvif/media_service 를 알려 주지만 이 카메라는 /onvif/media 에서만 응답한다
+    const cam = await createMockOnvif({ mediaPaths: ['/onvif/media'] });
+    try {
+        const r = await getStreamUris({ host: HOST, username: 'admin', password: 'pw', ports: [cam.port], servicePaths: SERVICE });
+        assert.equal(r.status, 'ok');
+        assert.equal(cam.state.failedAuth, 0);
+        // 404 였던 /onvif/media_service 로는 GetProfiles 를 한 번(자격 증명 없이)만 보냈다
+        const hits = cam.state.requests.filter(q => q.path === '/onvif/media_service');
+        assert.equal(hits.length, 1);
+    } finally { await cam.close(); }
+});
+
+test('잘못된 비밀번호 + 일부 경로만 응답하는 카메라: 자격 증명 요청은 1번뿐', async () => {
+    const cam = await createMockOnvif({ mediaPaths: ['/onvif/media'], canonicalFault: false, faultText: 'Authentication failed for user' });
+    try {
+        const r = await getStreamUris({ host: HOST, username: 'admin', password: 'bad', ports: [cam.port], servicePaths: SERVICE });
+        assert.equal(r.status, 'auth_failed');
+        assert.equal(cam.state.credentialed, 1);
+    } finally { await cam.close(); }
+});
