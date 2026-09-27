@@ -52,7 +52,7 @@ function soapRequest({ host, port, path, body, auth, offsetMs = 0, timeoutMs = 3
 }
 
 const isEnvelope = text => /<(?:\w+:)?Envelope\b/i.test(text);
-const isFault = text => /<(?:\w+:)?Fault/i.test(text);
+const isFault = text => /<(?:\w+:)?Fault\b/i.test(text);
 
 /** 카메라 UTC 시각 - 서버 시각 (ms). 파싱할 수 없으면 null */
 function parseUtcOffset(xml) {
