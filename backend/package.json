@@ -5,7 +5,8 @@
   "scripts": {
     "build-frontend": "cd ../frontend && npm install && npm run build",
     "start": "node server.js",
-    "start:all": "npm run build-frontend && npm start"
+    "start:all": "npm run build-frontend && npm start",
+    "test": "node --test \"tests/**/*.test.js\""
   },
   "keywords": [],
   "author": "김장현",
