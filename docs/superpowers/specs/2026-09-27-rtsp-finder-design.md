@@ -168,6 +168,6 @@ ONVIF 단계가 실패해도 결과는 2번 단계만 있는 경우와 같아야
 ## 열린 항목
 
 - 2대 카메라의 ONVIF 응답 여부(구현 초기에 `GetSystemDateAndTime`으로 확인).
-- `&` 포함 주소(예: Dahua `?channel=1&subtype=0`)가 `start_ffmpeg.bat`/`run_single_stream.bat`을 온전히 통과하는지 (mock 카메라로 확인, 계획 Task 9-2. 통과 전에는 main에 병합하지 않는다).
+- `&` 포함 주소(예: Dahua `?channel=1&subtype=0`)가 `start_ffmpeg.bat`/`run_single_stream.bat`을 통과하는지: 2026-09-27 mock 카메라(`backend/tests/helpers/amp-path-check.js`, 임시 패키지 폴더에서 실제 스크립트 실행)로 확인 — 수정 전 FAIL(`start_ffmpeg.bat`이 URL을 `cmd /c` 인자로 넘겨 `&` 뒤가 별도 명령으로 잘림), 수정 후 두 형식(기존 형식, `&` 포함 형식) 모두 PASS. 수정: URL을 명령줄 인자 대신 환경 변수 `STREAM_URL`로 전달(`start_ffmpeg.bat`이 `start` 직전에 설정, `run_single_stream.bat`이 읽음. 나머지 인자는 `%1`~`%3`으로 이동).
 - 2대 카메라가 "없는 경로"에 404/401 중 어느 쪽을 주는지(실기 검증). 두 유형 모두 mock 서버로 테스트한다.
 - 인증 실패 예산 2회가 적절한지(카메라 2대로는 잠금 기준을 확인할 수 없으므로 보수적으로 설정, 실제 잠금 테스트는 하지 않는다).

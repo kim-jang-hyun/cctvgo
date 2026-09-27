@@ -4,13 +4,13 @@
 cd /d "%~dp0"
 setlocal enabledelayedexpansion
 
-:: 이 스크립트는 네 개의 인수를 받습니다:
-:: %1=RTSP_URL, %2=OUTPUT_DIR, %3=STREAM_FILE, %4=RETRY_DELAY
+:: 이 스크립트는 세 개의 인수를 받습니다 (RTSP_URL은 & 등이 깨지지 않도록 환경 변수 STREAM_URL로 전달됩니다):
+:: %1=OUTPUT_DIR, %2=STREAM_FILE, %3=RETRY_DELAY
 
-set "RTSP_URL=%1"
-set "OUTPUT_DIR=%~2"
-set "STREAM_FILE=%~3"
-set "RETRY_DELAY=%4"
+set "RTSP_URL=!STREAM_URL!"
+set "OUTPUT_DIR=%~1"
+set "STREAM_FILE=%~2"
+set "RETRY_DELAY=%3"
 set OUTPUT_FILE=!OUTPUT_DIR!\!STREAM_FILE!
 
 :: package 폴더의 cctvgo-ffmpeg.exe 경로 설정

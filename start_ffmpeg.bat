@@ -27,7 +27,8 @@ for /f "tokens=1 delims=, eol=#" %%a in ('type "%STREAM_CONFIG_FILE%"') do (
     echo [%date% %time%][INFO] Launching Monitor "!PROCESS_COUNT!: !RTSP_URL! -> !OUTPUT_DIR!\!STREAM_FILE!"
     
     :: /b 옵션으로 창 숨기고 로그 파일 생성
-    start /b "Stream_!PROCESS_COUNT!" cmd /c "%~dp0!SINGLE_STREAM_SCRIPT! ^"!RTSP_URL!^" ^"!OUTPUT_DIR!^" ^"!STREAM_FILE!^" ^"!RETRY_DELAY!^" >> ^"%~dp0logs\stream_!PROCESS_COUNT!.log^" 2>&1"
+    set "STREAM_URL=!RTSP_URL!"
+    start /b "Stream_!PROCESS_COUNT!" cmd /c "%~dp0!SINGLE_STREAM_SCRIPT! ^"!OUTPUT_DIR!^" ^"!STREAM_FILE!^" ^"!RETRY_DELAY!^" >> ^"%~dp0logs\stream_!PROCESS_COUNT!.log^" 2>&1"
 )
 echo ---------------------------------------------
 echo [%date% %time%][INFO] All %PROCESS_COUNT% stream monitors started in background.
