@@ -158,12 +158,20 @@ async function api(url, options = {}) {
     headers: { 'Content-Type': 'application/json' },
     ...options,
   });
-  const type = res.headers.get('content-type') || '';
-  if (res.redirected || !type.includes('application/json')) {
+  let finalPath = '';
+  try { finalPath = new URL(res.url).pathname; } catch (e) { /* url 없음 */ }
+  if (res.redirected || finalPath === '/login') {
     router.push('/login');   // 세션 만료: authMiddleware 가 /login 으로 리다이렉트한 경우
     throw new Error('로그인이 필요합니다.');
   }
-  const data = await res.json();
+  const type = res.headers.get('content-type') || '';
+  let data;
+  try {
+    if (!type.includes('application/json')) throw new Error('not json');
+    data = await res.json();
+  } catch (e) {
+    throw new Error(`서버 응답을 처리할 수 없습니다. (${res.status})`);
+  }
   if (!res.ok) throw new Error(data.message || `요청에 실패했습니다. (${res.status})`);
   return data;
 }
