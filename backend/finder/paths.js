@@ -120,7 +120,7 @@ function loadSettings(baseDir) {
     const ext = readExternal(baseDir);
     const extPaths = (Array.isArray(ext.paths) ? ext.paths : [])
         .filter(p => typeof p === 'string' && p.startsWith('/'))
-        .map(p => ({ path: p, vendors: [] }));
+        .map(p => ({ path: p, vendors: [], external: true }));
     const extPorts = (Array.isArray(ext.onvifPorts) ? ext.onvifPorts : [])
         .filter(n => Number.isInteger(n) && n >= 1 && n <= 65535);
     const extServicePaths = (Array.isArray(ext.onvifServicePaths) ? ext.onvifServicePaths : [])
@@ -137,7 +137,9 @@ function loadSettings(baseDir) {
 function orderedPaths(settings, vendorHint = '') {
     const hint = String(vendorHint || '').toLowerCase();
     const matches = entry => hint !== '' && entry.vendors.some(v => hint.includes(v));
-    const external = settings.paths.filter(e => e.vendors.length === 0 && !BUILT_IN_PATHS.some(b => b.path === e.path));
+    // external 표시가 있으면 내장 후보와 겹쳐도 맨 앞 (rtsp-paths.json 이 출시 후 유일한 보강 수단이므로). 표시가 없는 설정은 내장에 없는 값만 외부로 본다
+    const isExternal = e => e.external === true || (e.external === undefined && e.vendors.length === 0 && !BUILT_IN_PATHS.some(b => b.path === e.path));
+    const external = settings.paths.filter(isExternal);
     const rest = settings.paths.filter(e => !external.includes(e));
     return unique([
         ...external.map(e => e.path),

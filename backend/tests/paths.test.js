@@ -61,3 +61,13 @@ test('제조사 힌트가 있으면 해당 제조사 경로가 앞선다', () =>
     assert.equal(orderedPaths(s, 'DAHUA')[0], '/cam/realmonitor?channel=1&subtype=0');
     assert.equal(orderedPaths(s, '알 수 없는 제조사')[0], '/Streaming/Channels/101');
 });
+
+test('외부 경로는 내장 후보와 겹쳐도 항상 맨 앞에 온다 (외부 파일 순서 유지)', () => {
+    const dir = tmpDir();
+    fs.writeFileSync(path.join(dir, 'rtsp-paths.json'), JSON.stringify({ paths: ['/ipcam.sdp', '/custom/x', '/onvif1'] }));
+    const list = orderedPaths(loadSettings(dir), 'hikvision');
+    assert.deepEqual(list.slice(0, 3), ['/ipcam.sdp', '/custom/x', '/onvif1']);
+    assert.equal(list[3], '/Streaming/Channels/101', '그 다음은 제조사 힌트 일치 내장 경로');
+    assert.equal(new Set(list).size, list.length, '중복 없음');
+    assert.equal(list.filter(p => p === '/ipcam.sdp').length, 1);
+});
