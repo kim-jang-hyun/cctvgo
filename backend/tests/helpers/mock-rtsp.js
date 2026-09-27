@@ -9,6 +9,7 @@ const md5 = s => crypto.createHash('md5').update(s).digest('hex');
  * - scheme: 'digest' | 'basic', qop: Digest qop=auth 사용 여부
  * - validPaths: 200을 돌려줄 경로 (쿼리 포함)
  * - unknownPathStatus: 인증 성공 후 없는 경로에 줄 코드. 404(대부분) 또는 401(일부 카메라)
+ * - algorithms: 광고할 Digest algorithm 목록 (예: ['SHA-256'] 또는 ['SHA-256','MD5']). 챌린지마다 WWW-Authenticate 헤더 한 줄. 기본은 algorithm 생략
  * - state.failedAuth: 카메라 입장에서 "로그인 실패"로 셀 수 있는 401 횟수
  */
 async function createMockRtsp({
@@ -19,6 +20,7 @@ async function createMockRtsp({
     unknownPathStatus = 404,
     pathOverrides = {}, // 특정 경로에 줄 코드 (인증 성공 후). 예: { '/a': 401 }
     requireAuth = true,
+    algorithms = null,
     dropAuthed = false, // true 면 Authorization 을 실은 요청에는 응답 없이 연결을 끊는다
     garbleAuthed = false, // true 면 Authorization 을 실은 요청에 RTSP 가 아닌 응답을 준다
     host = '127.0.0.1',
@@ -30,7 +32,8 @@ async function createMockRtsp({
 
     function challengeHeader() {
         if (scheme === 'basic') return `WWW-Authenticate: Basic realm="${realm}"\r\n`;
-        return `WWW-Authenticate: Digest realm="${realm}", nonce="${nonce}"${qop ? ', qop="auth"' : ''}\r\n`;
+        const one = alg => `WWW-Authenticate: Digest realm="${realm}", nonce="${nonce}"${alg ? `, algorithm=${alg}` : ''}${qop ? ', qop="auth"' : ''}\r\n`;
+        return algorithms ? algorithms.map(one).join('') : one(null);
     }
 
     function checkAuth(header, method, uri) {

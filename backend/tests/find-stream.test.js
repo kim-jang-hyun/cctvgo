@@ -242,3 +242,53 @@ test('ONVIF 재검증 중 카메라가 자격 증명 DESCRIBE 에 응답하지 �
         assert.ok(!rtsp.state.requests.some(q => q.path === '/onvif/profile2' && q.authed), '두 번째 프로파일에는 자격 증명을 보내지 않는다');
     } finally { await rtsp.close(); await onvif.close(); }
 });
+
+test('지원하지 않는 로그인 방식(SHA-256 Digest): 즉시 끝내고 예산도 쓰지 않는다', async () => {
+    const cam = await createMockRtsp({ algorithms: ['SHA-256'], validPaths: ['/b'] });
+    try {
+        const budget = new AuthBudget();
+        const r = await run(cam, { budget });
+        assert.equal(r.status, 'auth_failed');
+        assert.equal(r.authUnsupported, true);
+        assert.equal(r.ambiguous, true);
+        assert.equal(budget.failures(HOST), 0);
+        assert.equal(cam.state.failedAuth, 0);
+        assert.equal(cam.state.requests.length, 1, '성향 감지 요청 1건 후 중단');
+        assert.ok(cam.state.requests.every(q => !q.authed));
+    } finally { await cam.close(); }
+});
+
+test('지원하지 않는 로그인 방식: 직접 입력 경로에서도 즉시 끝낸다', async () => {
+    const cam = await createMockRtsp({ algorithms: ['SHA-256'], validPaths: ['/b'] });
+    try {
+        const budget = new AuthBudget();
+        const r = await run(cam, { budget, path: '/b', port: cam.port });
+        assert.equal(r.authUnsupported, true);
+        assert.equal(budget.failures(HOST), 0);
+        assert.ok(cam.state.requests.every(q => !q.authed));
+    } finally { await cam.close(); }
+});
+
+test('SHA-256 과 MD5 챌린지가 함께 오면 MD5 로 찾는다', async () => {
+    const cam = await createMockRtsp({ algorithms: ['SHA-256', 'MD5'], validPaths: ['/b'] });
+    try {
+        const r = await run(cam);
+        assert.equal(r.status, 'found');
+        assert.equal(cam.state.failedAuth, 0);
+    } finally { await cam.close(); }
+});
+
+test('예산이 소진된 auth_failed 에는 retryAfterSec 가 있고, 소진 전에는 없다', async () => {
+    const cam = await createMockRtsp({ validPaths: ['/b'] });
+    try {
+        const r = await run(cam, { password: 'wrong' });
+        assert.equal(r.status, 'auth_failed');
+        assert.ok(r.retryAfterSec > 0);
+    } finally { await cam.close(); }
+    const cam2 = await createMockRtsp({ validPaths: ['/b'] });
+    try {
+        const r = await run(cam2, { username: '', password: '' });
+        assert.equal(r.status, 'auth_failed');
+        assert.equal(r.retryAfterSec, undefined);
+    } finally { await cam2.close(); }
+});

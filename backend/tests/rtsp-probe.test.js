@@ -89,3 +89,58 @@ test('닫힌 포트는 unreachable', async () => {
     assert.equal(r.status, 'unreachable');
     assert.equal(r.authSent, false);
 });
+
+test('지원하지 않는 Digest algorithm(SHA-256)만 광고하면 자격 증명을 보내지 않는다', async () => {
+    const cam = await createMockRtsp({ algorithms: ['SHA-256'], validPaths: ['/stream1'] });
+    try {
+        const r = await describe({ host: HOST, port: cam.port, path: '/stream1', username: 'admin', password: 'pw' });
+        assert.equal(r.status, 'other');
+        assert.equal(r.code, 401);
+        assert.equal(r.authSent, false);
+        assert.equal(r.reason, 'unsupported-auth');
+        assert.ok(r.headers['www-authenticate']);
+        assert.equal(cam.state.failedAuth, 0);
+        assert.ok(cam.state.requests.every(q => !q.authed), 'Authorization 헤더를 보내지 않았다');
+    } finally { await cam.close(); }
+});
+
+test('MD5-sess 만 광고해도 자격 증명을 보내지 않는다', async () => {
+    const cam = await createMockRtsp({ algorithms: ['MD5-sess'], validPaths: ['/stream1'] });
+    try {
+        const r = await describe({ host: HOST, port: cam.port, path: '/stream1', username: 'admin', password: 'pw' });
+        assert.equal(r.reason, 'unsupported-auth');
+        assert.equal(r.authSent, false);
+    } finally { await cam.close(); }
+});
+
+test('Digest 챌린지가 여러 개면 MD5 를 골라 정상 인증한다', async () => {
+    const cam = await createMockRtsp({ algorithms: ['SHA-256', 'MD5'], validPaths: ['/stream1'] });
+    try {
+        const r = await describe({ host: HOST, port: cam.port, path: '/stream1', username: 'admin', password: 'pw' });
+        assert.equal(r.status, 'ok');
+        assert.equal(cam.state.failedAuth, 0);
+    } finally { await cam.close(); }
+});
+
+test('parseChallenge: MD5 Digest > Basic > 사용 불가 우선순위', () => {
+    const { parseChallenge } = require('../finder/rtsp-probe');
+    assert.equal(parseChallenge('Digest realm="a", nonce="n", algorithm=SHA-256, Basic realm="b"').scheme, 'basic');
+    assert.equal(parseChallenge('Basic realm="b", Digest realm="a", nonce="n", algorithm=md5').scheme, 'digest');
+    assert.equal(parseChallenge('Digest realm="a", nonce="n", algorithm=SHA-256').scheme, 'unsupported');
+    assert.equal(parseChallenge('Negotiate').scheme, 'unsupported');
+    assert.equal(parseChallenge(''), null);
+});
+
+test('username 에 제어문자/따옴표가 있으면 요청을 보내지 않는다', async () => {
+    const cam = await createMockRtsp({ validPaths: ['/stream1'] });
+    try {
+        for (const username of ['ad"min', 'ad\r\nX: 1', 'a\x00b', 'a\x7fb']) {
+            const r = await describe({ host: HOST, port: cam.port, path: '/stream1', username, password: 'pw' });
+            assert.equal(r.status, 'other');
+            assert.equal(r.code, 0);
+            assert.equal(r.authSent, false);
+            assert.equal(r.reason, 'invalid-credentials');
+        }
+        assert.equal(cam.state.requests.length, 0, '소켓 요청 없음');
+    } finally { await cam.close(); }
+});

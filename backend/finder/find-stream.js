@@ -39,9 +39,15 @@ async function findStream({
     const tried = [];
     const info = { server: null, realm: null, onvif: '시도 안 함', openPorts: [] };
 
-    const finish = (status, extra = {}) => ({
-        status, candidates: [], tried, diagnostics: buildDiagnostics(host, vendorHint, info, tried), ...extra,
-    });
+    const finish = (status, extra = {}) => {
+        const result = { status, candidates: [], tried, diagnostics: buildDiagnostics(host, vendorHint, info, tried), ...extra };
+        // 예산이 소진돼 끝난 경우 언제 다시 시도할 수 있는지 알려 준다
+        if (status === 'auth_failed' && budget.isExhausted(host)) result.retryAfterSec = Math.ceil(budget.retryAfterMs(host) / 1000);
+        return result;
+    };
+    // 카메라가 지원하지 않는 로그인 방식(Digest SHA-256 등)이면 자격 증명을 보내지 않았으므로 예산 소모 없이 바로 끝낸다
+    const unsupported = r => r.reason === 'unsupported-auth';
+    const finishUnsupported = () => finish('auth_failed', { ambiguous: true, authUnsupported: true });
     const candidate = (rtspPort, p, source, label) => ({
         url: buildRtspUrl({ username, password, host, port: rtspPort, path: p }), source, label,
     });
@@ -84,6 +90,7 @@ async function findStream({
         const ports = port ? [port] : await openRtspPorts();
         if (ports.length === 0) return finish('unreachable');
         const r = await attempt(ports[0], normalized);
+        if (unsupported(r)) return finishUnsupported();
         if (r.status === 'ok') return finish('found', { candidates: [candidate(ports[0], normalized, 'manual', normalized)] });
         if (r.status === 'unreachable') return finish('unreachable');
         if (r.status === 'unauthorized') return finish('auth_failed', { ambiguous: true });
@@ -109,6 +116,7 @@ async function findStream({
             const rtspPort = Number(u.port) || 554;
             const p = (u.pathname || '/') + (u.search || '');
             const r = await attempt(rtspPort, p);   // 카메라가 알려 준 주소라도 실제 접속을 확인한다
+            if (unsupported(r)) return finishUnsupported();
             if (r.status === 'ok') verified.push(candidate(rtspPort, p, 'onvif', item.name || item.token));
             else if (r.status === 'unreachable') break;
         }
@@ -125,6 +133,7 @@ async function findStream({
     if (budget.isExhausted(host)) return finish('auth_failed', { ambiguous: true });
 
     const bogus = await attempt(rtspPort, BOGUS_PATH);
+    if (unsupported(bogus)) return finishUnsupported();
     if (bogus.status === 'unreachable') return finish('unreachable');
     if (bogus.status === 'ok') {
         return finish('found', { candidates: [candidate(rtspPort, BOGUS_PATH, 'path', '(모든 경로에 응답하는 카메라)')] });
@@ -137,6 +146,7 @@ async function findStream({
     for (const p of orderedPaths(settings, vendorHint)) {
         if (budget.isExhausted(host)) return finish('auth_failed', { ambiguous: true });
         const r = await attempt(rtspPort, p);
+        if (unsupported(r)) return finishUnsupported();
         if (r.status === 'ok') return finish('found', { candidates: [candidate(rtspPort, p, 'path', p)] });
         if (r.status === 'unreachable') return finish('unreachable');
         if (r.status === 'unauthorized' && strict) return finish('auth_failed', { ambiguous: false });

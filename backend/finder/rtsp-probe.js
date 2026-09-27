@@ -8,6 +8,7 @@ const crypto = require('crypto');
  * - authSent: 아이디/비밀번호를 실어 보낸 요청의 결과인지 (인증 실패 예산 계산에 쓴다)
  */
 
+const INVALID_CREDENTIAL_RE = /[\x00-\x1f\x7f"]/;
 const md5 = s => crypto.createHash('md5').update(s).digest('hex');
 
 function sendRaw(host, port, request, timeoutMs) {
@@ -54,20 +55,50 @@ function parseResponse(raw) {
     return { code: Number(m[1]), headers };
 }
 
-/** WWW-Authenticate 값에서 Digest(우선) 또는 Basic 챌린지를 뽑는다 */
+/** WWW-Authenticate 값(여러 줄은 ", "로 합쳐져 있다)을 챌린지별 문자열로 나눈다. 따옴표 안의 쉼표/단어는 무시한다. */
+function splitChallenges(value) {
+    const starts = [];
+    let inQuote = false;
+    for (let i = 0; i < value.length; i++) {
+        const c = value[i];
+        if (c === '"') inQuote = !inQuote;
+        if (inQuote) continue;
+        const atBoundary = i === 0 || /[,\s]/.test(value[i - 1]);
+        if (atBoundary && /^[A-Za-z][\w-]*(\s|$)/.test(value.slice(i)) && !/^\w+=/.test(value.slice(i))) {
+            // 스킴 이름(Digest/Basic/기타) 뒤에는 공백이 오고, 파라미터(key=value)와 구별한다
+            const word = /^[A-Za-z][\w-]*/.exec(value.slice(i))[0];
+            const prev = value.slice(0, i).trimEnd();
+            if (i === 0 || prev.endsWith(',')) starts.push({ at: i, word });
+        }
+    }
+    return starts.map((st, k) => ({
+        scheme: st.word.toLowerCase(),
+        body: value.slice(st.at + st.word.length, k + 1 < starts.length ? starts[k + 1].at : undefined).replace(/,\s*$/, ''),
+    }));
+}
+
+/**
+ * 사용할 챌린지를 고른다. 우선순위: algorithm 이 없거나 MD5 인 Digest(첫 번째) > Basic > 사용 불가.
+ * 헤더가 없으면 null, 있는데 쓸 수 있는 것이 없으면 { scheme: 'unsupported' } (이때는 자격 증명을 보내면 안 된다).
+ */
 function parseChallenge(value) {
     if (!value) return null;
-    const digestAt = value.search(/digest\s/i);
-    if (digestAt >= 0) {
-        const part = value.slice(digestAt + 7).split(/,\s*basic\s/i)[0];
+    const list = splitChallenges(value);
+    if (list.length === 0) return null;
+    for (const ch of list) {
+        if (ch.scheme !== 'digest') continue;
         const params = {};
         const re = /(\w+)=(?:"([^"]*)"|([^\s,]+))/g;
         let m;
-        while ((m = re.exec(part))) params[m[1].toLowerCase()] = m[2] !== undefined ? m[2] : m[3];
-        return { scheme: 'digest', ...params };
+        while ((m = re.exec(ch.body))) params[m[1].toLowerCase()] = m[2] !== undefined ? m[2] : m[3];
+        if (params.algorithm === undefined || /^md5$/i.test(params.algorithm)) return { scheme: 'digest', ...params };
     }
-    const basic = /basic\s+realm="?([^",]*)"?/i.exec(value);
-    return basic ? { scheme: 'basic', realm: basic[1] } : null;
+    const basic = list.find(ch => ch.scheme === 'basic');
+    if (basic) {
+        const m = /realm="?([^",]*)"?/i.exec(basic.body);
+        return { scheme: 'basic', realm: m ? m[1] : '' };
+    }
+    return { scheme: 'unsupported' };
 }
 
 function buildAuthHeader(challenge, username, password, uri) {
@@ -99,6 +130,8 @@ function classify(resp, authSent, extraHeaders) {
 }
 
 async function describe({ host, port, path, username = '', password = '', timeoutMs = 2000 }) {
+    // 요청 헤더/줄바꿈 주입 방지: 이런 아이디는 어떤 요청도 보내지 않는다
+    if (INVALID_CREDENTIAL_RE.test(username)) return { status: 'other', code: 0, authSent: false, headers: {}, reason: 'invalid-credentials' };
     const uri = `rtsp://${host}:${port}${path.startsWith('/') ? path : '/' + path}`;
 
     const first = await sendRaw(host, port, buildRequest(uri, 1, ''), timeoutMs);
@@ -109,6 +142,9 @@ async function describe({ host, port, path, username = '', password = '', timeou
 
     const challenge = parseChallenge(r1.headers['www-authenticate']);
     if (!challenge) return classify(r1, false);
+
+    // SHA-256/MD5-sess 등 지원하지 않는 방식은 틀린 응답을 보내 로그인 실패로 세이게 되므로 자격 증명을 보내지 않는다
+    if (challenge.scheme === 'unsupported') return { ...classify(r1, false), status: 'other', reason: 'unsupported-auth' };
 
     const auth = buildAuthHeader(challenge, username, password, uri);
     const second = await sendRaw(host, port, buildRequest(uri, 2, `Authorization: ${auth}\r\n`), timeoutMs);
