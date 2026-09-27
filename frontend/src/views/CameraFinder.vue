@@ -247,10 +247,15 @@ function messageFor(r) {
   switch (r.status) {
     case 'unreachable':
       return '카메라에 연결할 수 없습니다. IP 주소가 맞는지, 카메라 전원과 네트워크 연결을 확인하세요.';
-    case 'auth_failed':
-      return r.ambiguous
+    case 'auth_failed': {
+      if (r.authUnsupported) {
+        return '이 카메라는 지원하지 않는 로그인 방식(Digest SHA-256 등)을 사용합니다. 카메라 설명서의 RTSP 주소를 cctv.txt에 직접 입력해 주세요.';
+      }
+      const wait = r.retryAfterSec > 0 ? ` 약 ${Math.max(1, Math.ceil(r.retryAfterSec / 60))}분 뒤에 다시 시도할 수 있습니다.` : '';
+      return (r.ambiguous
         ? `아이디/비밀번호 또는 경로 문제일 수 있습니다.${vendor} 카메라 자체 웹페이지에서 로그인되는 아이디/비밀번호인지 먼저 확인하고, 안 되면 "주소 직접 입력"을 사용하세요.`
-        : '카메라 아이디 또는 비밀번호가 맞지 않습니다. 카메라 자체 웹페이지에서 로그인되는 아이디/비밀번호인지 먼저 확인하세요.';
+        : '카메라 아이디 또는 비밀번호가 맞지 않습니다. 카메라 자체 웹페이지에서 로그인되는 아이디/비밀번호인지 먼저 확인하세요.') + wait;
+    }
     case 'auth_locked': {
       const min = Math.max(1, Math.ceil((r.retryAfterSec || 0) / 60));
       return `카메라 잠금 방지를 위해 약 ${min}분 뒤에 다시 시도하세요. 그 사이 카메라 자체 웹페이지에서 아이디/비밀번호를 확인해 보세요.`;
