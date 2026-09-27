@@ -155,6 +155,10 @@ app.get('/api/get-channel-list', authMiddleware, (req, res) => {
     }
 });
 
+// 카메라 주소 찾기 (RTSP Finder) API
+const { registerFinderRoutes } = require('./finder/routes');
+registerFinderRoutes(app, { authMiddleware, baseDir: BASE_DIR, cctvPath: CCTV_CONFIG_PATH });
+
 // 인증 미들웨어
 function authMiddleware(req, res, next) {
   // 로그인 페이지와 정적 자산은 인증 없이 접근 허용
