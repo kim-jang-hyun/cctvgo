@@ -69,3 +69,12 @@ test('SOAP이 아닌 웹서버(404)는 unsupported 이고 인증 실패로 세�
         assert.deepEqual(r, { status: 'unsupported' });
     } finally { web.close(); }
 });
+
+test('GetStreamUri만 인증을 요구하는 카메라도 틀린 비밀번호면 인증 요청 1번 만에 auth_failed', async () => {
+    const cam = await createMockOnvif({ anonymousProfiles: true });
+    try {
+        const r = await getStreamUris({ host: HOST, username: 'admin', password: 'wrong', ports: [cam.port], servicePaths: SERVICE });
+        assert.equal(r.status, 'auth_failed');
+        assert.equal(cam.state.failedAuth, 1);
+    } finally { await cam.close(); }
+});

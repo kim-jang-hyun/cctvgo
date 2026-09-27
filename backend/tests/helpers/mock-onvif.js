@@ -11,6 +11,7 @@ const crypto = require('crypto');
 async function createMockOnvif({
     users = { admin: 'pw' },
     requireAuth = true,
+    anonymousProfiles = false, // true 면 GetProfiles 는 인증 없이 허용하고 GetStreamUri 만 인증을 요구한다
     clockOffsetMs = 0,
     maxSkewMs = 5000,
     rtspPort = 554,
@@ -70,7 +71,7 @@ async function createMockOnvif({
                     + `<tt:XAddr>http://0.0.0.0:${server.address().port}/onvif/media_service</tt:XAddr>`
                     + '</tt:Media></tds:Capabilities></tds:GetCapabilitiesResponse>'));
             }
-            if (requireAuth && !authorized(body)) {
+            if (requireAuth && !(anonymousProfiles && op === 'GetProfiles') && !authorized(body)) {
                 state.failedAuth++;
                 return send(400, notAuthorized());
             }

@@ -114,7 +114,8 @@ async function tryEndpoint({ host, port, servicePath, username, password, timeou
                 + '<tt:Transport><tt:Protocol>RTSP</tt:Protocol></tt:Transport></trt:StreamSetup>'
                 + `<trt:ProfileToken>${xmlEscape(profile.token)}</trt:ProfileToken></trt:GetStreamUri>`;
             const ur = await soapRequest({ host, port, path: mediaPath, body, auth, offsetMs, timeoutMs });
-            if (!ur.ok || !isEnvelope(ur.text) || isNotAuthorized(ur.text)) continue;
+            if (ur.ok && isEnvelope(ur.text) && isNotAuthorized(ur.text)) return { status: 'auth_failed' };
+            if (!ur.ok || !isEnvelope(ur.text)) continue;
             const uri = parseUri(ur.text);
             if (uri) uris.push({ token: profile.token, name: profile.name, uri });
         }
