@@ -3028,6 +3028,128 @@ git commit -m "카메라 찾기: /finder 화면과 영상 화면 진입 링크" 
 
 ---
 
+### Task 9-2: `&` 포함 주소가 스트림 실행 스크립트까지 전달되는지 확인 (카메라 불필요, 필수)
+
+Dahua 계열 주소(`/cam/realmonitor?channel=1&subtype=0`)는 이 기능이 저장할 수 있는 주소인데, 기존 `start_ffmpeg.bat` → `run_single_stream.bat` → ffmpeg 경로에서 `&`가 올바르게 전달되는지 확인된 적이 없다. `start_ffmpeg.bat`은 URL을 `^"!RTSP_URL!^"` 형태로 `cmd /c` 인자에 넘기는데, 따옴표 안의 `^`는 이스케이프가 아니라 문자 그대로라서 자식 `cmd`가 `&`를 명령 구분자로 해석해 주소가 잘릴 가능성이 있다. **이 작업은 통과(또는 수정 후 통과)해야 완료된다. 메모로 남기고 넘어가지 않는다. 통과하기 전에는 `feature/rtsp-finder`를 main에 병합하지 않는다.**
+
+**Files:**
+- Create: `backend/tests/helpers/amp-path-check.js` (수동 확인용 스크립트, 자동 테스트 아님)
+- Modify (확인 결과가 FAIL일 때만): `start_ffmpeg.bat`, `run_single_stream.bat`
+- Modify: `docs/superpowers/specs/2026-09-27-rtsp-finder-design.md` ("열린 항목"에 결과 기록)
+
+**Interfaces:**
+- Consumes: Task 4의 `createMockRtsp` (`backend/tests/helpers/mock-rtsp.js`)
+- Produces: 스크립트 종료 코드 0(두 형식 모두 PASS) / 1(하나라도 FAIL)
+
+- [ ] **Step 1: 확인 스크립트 작성**
+
+`backend/tests/helpers/amp-path-check.js`:
+
+```js
+'use strict';
+// & 가 들어간 RTSP 주소가 start_ffmpeg.bat -> run_single_stream.bat -> ffmpeg 까지 온전히 전달되는지 확인한다.
+// 사용: node tests/helpers/amp-path-check.js [대기 ms, 기본 15000]
+// 가짜 카메라(127.0.0.1:5540)가 받은 요청 경로를 보고 판정하고, 종료 코드 0=PASS, 1=FAIL.
+const { createMockRtsp } = require('./mock-rtsp');
+
+const WAIT_MS = Number(process.argv[2] || 15000);
+const PLAIN = '/Streaming/Channels/101';
+const AMP = '/cam/realmonitor?channel=1&subtype=0';
+
+(async () => {
+    const cam = await createMockRtsp({ requireAuth: false, port: 5540, validPaths: [PLAIN, AMP] });
+    console.log(`가짜 카메라 대기 중 (포트 ${cam.port}, ${WAIT_MS / 1000}초)`);
+    await new Promise(resolve => setTimeout(resolve, WAIT_MS));
+
+    const paths = Array.from(new Set(cam.state.requests.map(r => r.path)));
+    console.log('받은 요청 경로:', paths);
+    const okPlain = paths.includes(PLAIN);
+    const okAmp = paths.includes(AMP);
+    console.log(`기존 형식(& 없음): ${okPlain ? 'PASS' : 'FAIL'}`);
+    console.log(`& 포함 형식     : ${okAmp ? 'PASS' : 'FAIL'}`);
+    await cam.close();
+    process.exit(okPlain && okAmp ? 0 : 1);
+})();
+```
+
+- [ ] **Step 2: 임시 패키지 폴더 구성 (PowerShell)**
+
+운영 중인 `cctvgo.bat`이 있으면 영향을 주지 않도록, 저장소 폴더가 아니라 임시 폴더에 실제 스크립트를 복사해서 실행한다.
+
+```powershell
+$pkg = "$env:TEMP\cctvgo-amp-check"
+Remove-Item -Recurse -Force $pkg -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force "$pkg\ffmpeg\bin", "$pkg\logs" | Out-Null
+Copy-Item C:\cctvgo\start_ffmpeg.bat, C:\cctvgo\run_single_stream.bat $pkg
+Copy-Item C:\cctvgo\ffmpeg\bin\cctvgo-ffmpeg.exe "$pkg\ffmpeg\bin\"
+@"
+rtsp://admin:start%244962@127.0.0.1:5540/Streaming/Channels/101, plain
+rtsp://admin:pw%241@127.0.0.1:5540/cam/realmonitor?channel=1&subtype=0, amp
+"@ | Set-Content -Encoding ascii "$pkg\cctv.txt"
+Get-Content "$pkg\cctv.txt"
+```
+
+Expected: 두 줄이 그대로 출력된다 (2번째 줄에 `&` 포함).
+
+- [ ] **Step 3: 가짜 카메라를 띄우고 실제 스크립트 실행**
+
+```powershell
+$pkg = "$env:TEMP\cctvgo-amp-check"
+$mock = Start-Process node -ArgumentList 'tests/helpers/amp-path-check.js', '20000' -WorkingDirectory C:\cctvgo\backend -RedirectStandardOutput "$pkg\mock.out" -PassThru -WindowStyle Hidden
+Start-Sleep 2
+Start-Process cmd -ArgumentList '/c', 'start_ffmpeg.bat' -WorkingDirectory $pkg -WindowStyle Hidden
+$mock.WaitForExit()
+Get-Content "$pkg\mock.out"
+"종료 코드: $($mock.ExitCode)"
+Get-Content "$pkg\logs\stream_2.log" -TotalCount 15
+```
+
+Expected (통과): `기존 형식(& 없음): PASS`, `& 포함 형식     : PASS`, 종료 코드 0. 받은 요청 경로 목록에 `/cam/realmonitor?channel=1&subtype=0`가 통째로 있어야 한다.
+FAIL이면 `stream_2.log`의 `RTSP_URL:` 줄이 어디서 잘렸는지(`channel=1`까지만 있는지 등)를 확인해 원인 위치(`start_ffmpeg.bat`의 인자 전달인지, `run_single_stream.bat`의 사용인지)를 기록한다.
+
+- [ ] **Step 4: 실행한 프로세스 정리 (임시 폴더의 프로세스만)**
+
+`cctvgo-ffmpeg.exe`를 이미지 이름으로 일괄 종료하면 운영 중인 스트림도 죽으므로, 반드시 임시 폴더 경로로 걸러서 종료한다.
+
+```powershell
+1..2 | ForEach-Object {
+  Get-CimInstance Win32_Process |
+    Where-Object { $_.CommandLine -like '*cctvgo-amp-check*' -or $_.ExecutablePath -like '*cctvgo-amp-check*' } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+  Start-Sleep 2
+}
+Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*cctvgo-amp-check*' } | Measure-Object | Select-Object -ExpandProperty Count
+```
+
+Expected: 마지막 줄이 `0`.
+
+- [ ] **Step 5: 결과에 따라 분기**
+
+**PASS인 경우:** Step 6으로 간다.
+
+**FAIL인 경우 (`&` 형식만 FAIL):** `superpowers:systematic-debugging`으로 원인을 확정한 뒤 수정한다. 후보 수정안(검증 전 가설): URL을 명령줄 인자가 아니라 환경 변수로 넘긴다. `start`로 띄운 자식 프로세스는 그 시점의 환경 변수를 물려받고, 환경 변수 값에 든 `&`는 명령으로 재해석되지 않는다.
+
+- `start_ffmpeg.bat`: 루프 안에서 `start` 직전에 `set "STREAM_URL=!RTSP_URL!"` 를 실행하고, 자식 호출에서 `^"!RTSP_URL!^"` 인자를 제거한다 (나머지 3개 인자 `OUTPUT_DIR`, `STREAM_FILE`, `RETRY_DELAY`의 위치가 바뀌므로 `run_single_stream.bat`의 `%2`~`%4` 참조도 함께 맞춘다).
+- `run_single_stream.bat`: `set "RTSP_URL=%1"` 대신 `set "RTSP_URL=!STREAM_URL!"` 를 사용한다.
+
+수정 후 Step 2~4를 다시 실행해 **두 형식 모두 PASS**인지 확인한다. 기존 형식(`plain`)이 깨지면 안 된다. 가설이 틀려 PASS가 나오지 않으면 다른 수정안을 시도하고, 반복해도 안전하게 고칠 수 없으면 병합하지 말고 사용자에게 보고한다(이 주소를 저장 단계에서 경고/차단할지 결정 필요).
+
+- [ ] **Step 6: 결과 기록 및 커밋**
+
+스펙의 "열린 항목"에 다음을 추가한다 (실제 결과로 채운다).
+
+```markdown
+- `&` 포함 주소가 `start_ffmpeg.bat`/`run_single_stream.bat`을 통과하는지: 2026-MM-DD mock 카메라로 확인 — (PASS 그대로 통과 | FAIL 후 수정 X 적용, 재확인 PASS)
+```
+
+```bash
+cd /c/cctvgo && git add backend/tests/helpers/amp-path-check.js docs/superpowers/specs/2026-09-27-rtsp-finder-design.md
+# FAIL 후 수정한 경우에는 start_ffmpeg.bat run_single_stream.bat 도 함께 add
+git commit -m "카메라 찾기: & 포함 주소의 스트림 스크립트 전달 확인" -m "Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
+```
+
+---
+
 ### Task 10: 집에서 실기 검증 (카메라 2대 필요, 코드 변경 없음)
 
 카페에서는 진행하지 않는다. 집에서 카메라(`192.168.219.100` Hikvision 계열, `192.168.219.194` `/onvif1` 사용)에 접속 가능한 상태에서 수행하고, 결과를 스펙 `docs/superpowers/specs/2026-09-27-rtsp-finder-design.md`의 "열린 항목"에 기록한다.
@@ -3080,6 +3202,6 @@ git commit -m "RTSP Finder 실기 검증 결과 기록" -m "Co-Authored-By: Clau
 
 ## 알려진 미검증 위험 (이번 범위 밖, 발견 시 별도 이슈)
 
-- **URL에 `&`가 포함된 경우**(예: Dahua `/cam/realmonitor?channel=1&subtype=0`): 저장은 되지만 기존 `start_ffmpeg.bat`/`run_single_stream.bat`의 `cmd /c` 인자 처리에서 `&`가 올바르게 전달되는지 확인되지 않았다. Dahua 계열 카메라가 없어 이번 검증에서 확인할 수 없다.
+- **URL에 `&`가 포함된 경우**(예: Dahua `/cam/realmonitor?channel=1&subtype=0`): 이 위험은 메모로 남기지 않고 **Task 9-2에서 반드시 확인/해결한다** (mock 카메라로 카메라 없이 검증 가능). Task 9-2가 통과하기 전에는 병합하지 않는다.
 - ONVIF는 실기 검증이 카메라 2대로 제한된다 (Task 10 Step 3 결과에 따라 "미검증"으로 표시).
 - 경로 후보 DB의 실제 커버리지 비율은 알 수 없다. 문의를 받으면 `rtsp-paths.json` 교체로 보강한다.
