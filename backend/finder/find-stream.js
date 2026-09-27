@@ -1,0 +1,141 @@
+'use strict';
+const { describe } = require('./rtsp-probe');
+const onvif = require('./onvif');
+const { tcpOpen, RTSP_PORTS } = require('./scan');
+const { buildRtspUrl } = require('./cctv-file');
+const { orderedPaths } = require('./paths');
+
+/**
+ * 카메라 RTSP URL 탐색 오케스트레이션.
+ *
+ * 순서: ONVIF GetStreamUri(재검증) → 존재하지 않는 경로로 카메라 성향 감지 → 경로 후보 DESCRIBE
+ *
+ * 계정 잠금 방지 (budget = AuthBudget, IP별 인증 실패 2회):
+ * - 아이디/비밀번호를 실어 보낸 요청이 401이면 실패 1회로 센다 (ONVIF NotAuthorized 포함).
+ * - 성향 감지: 없는 경로에 404 → 계정은 맞고 이후 401은 비밀번호 오류로 확정(즉시 중단).
+ *              없는 경로에 401 → 비밀번호 오류이거나 "경로가 틀려도 401을 주는" 카메라. 예산 안에서만 계속.
+ */
+
+const BOGUS_PATH = '/cctvgo-probe-test';
+
+function buildDiagnostics(host, vendorHint, info, tried) {
+    return [
+        'CCTVGO 카메라 주소 찾기 진단 정보',
+        `카메라 IP: ${host}`,
+        `제조사/모델 힌트: ${vendorHint || '알 수 없음'}`,
+        `열린 RTSP 포트: ${info.openPorts.length ? info.openPorts.join(', ') : '없음'}`,
+        `RTSP Server 헤더: ${info.server || '알 수 없음'}`,
+        `RTSP 인증 realm: ${info.realm || '알 수 없음'}`,
+        `ONVIF: ${info.onvif}`,
+        `시도한 항목 (${tried.length}개):`,
+        ...tried.map(t => `  - [${t.kind}] ${t.target} → ${t.result}`),
+    ].join('\n');
+}
+
+async function findStream({
+    host, port, path, username = '', password = '', vendorHint = '',
+    budget, settings, rtspPorts = RTSP_PORTS, rtspTimeoutMs = 2000, onvifTimeoutMs = 3000,
+}) {
+    const tried = [];
+    const info = { server: null, realm: null, onvif: '시도 안 함', openPorts: [] };
+
+    const finish = (status, extra = {}) => ({
+        status, candidates: [], tried, diagnostics: buildDiagnostics(host, vendorHint, info, tried), ...extra,
+    });
+    const candidate = (rtspPort, p, source, label) => ({
+        url: buildRtspUrl({ username, password, host, port: rtspPort, path: p }), source, label,
+    });
+
+    function noteHeaders(h) {
+        if (!h) return;
+        if (h.server) info.server = h.server;
+        const m = /realm="([^"]*)"/i.exec(h['www-authenticate'] || '');
+        if (m) info.realm = m[1];
+    }
+
+    /** DESCRIBE 1회. 로그인 실패(401)는 예산에 기록하고, 인증에 성공하면 예산을 초기화한다. */
+    async function attempt(rtspPort, p) {
+        const r = await describe({ host, port: rtspPort, path: p, username, password, timeoutMs: rtspTimeoutMs });
+        tried.push({ kind: 'rtsp', target: `${rtspPort}${p}`, result: r.status === 'unreachable' ? `연결 실패(${r.reason})` : String(r.code) });
+        noteHeaders(r.headers);
+        if (r.authSent && r.status === 'unauthorized') budget.recordFailure(host);
+        if (r.authSent && (r.status === 'ok' || r.status === 'not_found')) budget.reset(host);
+        return r;
+    }
+
+    async function openRtspPorts() {
+        const open = [];
+        for (const p of rtspPorts) {
+            if (await tcpOpen(host, p, 500)) open.push(p);
+        }
+        info.openPorts = open;
+        return open;
+    }
+
+    if (budget.isExhausted(host)) {
+        return finish('auth_locked', { retryAfterSec: Math.ceil(budget.retryAfterMs(host) / 1000) });
+    }
+
+    // --- 직접 입력한 경로 ---
+    if (path) {
+        const normalized = path.startsWith('/') ? path : '/' + path;
+        const ports = port ? [port] : await openRtspPorts();
+        if (ports.length === 0) return finish('unreachable');
+        const r = await attempt(ports[0], normalized);
+        if (r.status === 'ok') return finish('found', { candidates: [candidate(ports[0], normalized, 'manual', normalized)] });
+        if (r.status === 'unreachable') return finish('unreachable');
+        if (r.status === 'unauthorized') return finish('auth_failed', { ambiguous: true });
+        return finish('path_not_found');
+    }
+
+    // --- 1) ONVIF ---
+    const on = await onvif.getStreamUris({
+        host, username, password, ports: settings.onvifPorts, servicePaths: settings.onvifServicePaths, timeoutMs: onvifTimeoutMs,
+    });
+    info.onvif = on.status === 'ok' ? `응답함 (프로파일 ${on.uris.length}개)` : on.status === 'auth_failed' ? '응답함, 인증 실패' : '응답 없음 또는 미지원';
+    tried.push({ kind: 'onvif', target: host, result: on.status });
+
+    if (on.status === 'ok') {
+        const verified = [];
+        for (const item of on.uris) {
+            if (budget.isExhausted(host)) break;
+            let u;
+            try { u = new URL(item.uri); } catch (e) { continue; }
+            const rtspPort = Number(u.port) || 554;
+            const p = (u.pathname || '/') + (u.search || '');
+            const r = await attempt(rtspPort, p);   // 카메라가 알려 준 주소라도 실제 접속을 확인한다
+            if (r.status === 'ok') verified.push(candidate(rtspPort, p, 'onvif', item.name || item.token));
+        }
+        if (verified.length) return finish('found', { candidates: verified });
+    } else if (on.status === 'auth_failed') {
+        budget.recordFailure(host);
+        if (budget.isExhausted(host)) return finish('auth_failed', { ambiguous: false });
+    }
+
+    // --- 2) 경로 후보 ---
+    const ports = port ? [port] : await openRtspPorts();
+    if (ports.length === 0) return finish('unreachable');
+    const rtspPort = ports[0];
+    if (budget.isExhausted(host)) return finish('auth_failed', { ambiguous: true });
+
+    const bogus = await attempt(rtspPort, BOGUS_PATH);
+    if (bogus.status === 'unreachable') return finish('unreachable');
+    if (bogus.status === 'ok') {
+        return finish('found', { candidates: [candidate(rtspPort, BOGUS_PATH, 'path', '(모든 경로에 응답하는 카메라)')] });
+    }
+    if (bogus.status === 'unauthorized' && !username) {
+        return finish('auth_failed', { ambiguous: false });
+    }
+    const strict = bogus.status !== 'unauthorized';   // 없는 경로에 401이 아니면 계정은 맞다
+
+    for (const p of orderedPaths(settings, vendorHint)) {
+        if (budget.isExhausted(host)) return finish('auth_failed', { ambiguous: true });
+        const r = await attempt(rtspPort, p);
+        if (r.status === 'ok') return finish('found', { candidates: [candidate(rtspPort, p, 'path', p)] });
+        if (r.status === 'unreachable') return finish('unreachable');
+        if (r.status === 'unauthorized' && strict) return finish('auth_failed', { ambiguous: false });
+    }
+    return budget.isExhausted(host) ? finish('auth_failed', { ambiguous: true }) : finish('path_not_found');
+}
+
+module.exports = { findStream, BOGUS_PATH };
