@@ -19,6 +19,55 @@ test('Digest 인증: 올바른 계정이면 ok', async () => {
     } finally { await cam.close(); }
 });
 
+test('nonce 를 연결마다 새로 주는 카메라: 같은 연결에서 인증해 ok (로그인 실패 0회)', async () => {
+    const cam = await createMockRtsp({ connectionNonce: true, validPaths: ['/stream1'] });
+    try {
+        const r = await describe({ host: HOST, port: cam.port, path: '/stream1', username: 'admin', password: 'pw' });
+        assert.equal(r.status, 'ok');
+        assert.equal(r.authSent, true);
+        assert.equal(cam.state.failedAuth, 0);
+    } finally { await cam.close(); }
+});
+
+test('401 뒤에 연결을 닫는 카메라(Connection: close): 새 연결로 인증해 ok', async () => {
+    const cam = await createMockRtsp({ closeAfterResponse: true, validPaths: ['/stream1'] });
+    try {
+        const r = await describe({ host: HOST, port: cam.port, path: '/stream1', username: 'admin', password: 'pw' });
+        assert.equal(r.status, 'ok');
+        assert.equal(cam.state.failedAuth, 0);
+    } finally { await cam.close(); }
+});
+
+test('DESCRIBE 가 200이면 같은 연결로 SETUP 까지 보내 재생 가능한지 확인한다', async () => {
+    const cam = await createMockRtsp({ connectionNonce: true, validPaths: ['/stream1'] });
+    try {
+        const r = await describe({ host: HOST, port: cam.port, path: '/stream1', username: 'admin', password: 'pw' });
+        assert.equal(r.status, 'ok');
+        assert.ok(cam.state.requests.some(q => q.method === 'SETUP' && q.path === '/stream1/track1' && q.code === 200));
+    } finally { await cam.close(); }
+});
+
+test('DESCRIBE 는 아무 경로나 200이고 SETUP 에서 거절하는 카메라(실기 HIipCamera): setup_failed, 로그인 실패 아님', async () => {
+    const cam = await createMockRtsp({ connectionNonce: true, validPaths: ['/onvif1'], unknownPathStatus: 200, unknownSetupStatus: 400 });
+    try {
+        const r = await describe({ host: HOST, port: cam.port, path: '/Streaming/Channels/101', username: 'admin', password: 'pw' });
+        assert.equal(r.status, 'setup_failed');
+        assert.equal(r.code, 400);
+        assert.equal(r.authSent, true);
+        assert.equal(r.authAccepted, true, 'DESCRIBE 200 이므로 계정은 맞다');
+        assert.equal(cam.state.failedAuth, 0);
+    } finally { await cam.close(); }
+});
+
+test('TCP 전송을 거절(461)하는 UDP 전용 카메라: 경로는 있으므로 ok', async () => {
+    const cam = await createMockRtsp({ connectionNonce: true, validPaths: ['/stream1'], setupStatus: 461 });
+    try {
+        const r = await describe({ host: HOST, port: cam.port, path: '/stream1', username: 'admin', password: 'pw' });
+        assert.equal(r.status, 'ok');
+        assert.equal(cam.state.failedAuth, 0);
+    } finally { await cam.close(); }
+});
+
 test('Digest qop=auth 인증도 지원한다', async () => {
     const cam = await createMockRtsp({ qop: true, validPaths: ['/stream1'] });
     try {

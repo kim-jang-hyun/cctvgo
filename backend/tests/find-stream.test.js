@@ -72,6 +72,52 @@ test('경로가 틀려도 401을 주는 카메라라도 첫 후보가 맞으면 
     } finally { await cam.close(); }
 });
 
+test('어떤 경로에도 200을 주는 카메라: 확인용 경로가 아니라 첫 경로 후보를 돌려준다', async () => {
+    const cam = await createMockRtsp({ validPaths: [], unknownPathStatus: 200 });
+    try {
+        const budget = new AuthBudget();
+        const r = await run(cam, { budget });
+        assert.equal(r.status, 'found');
+        assert.equal(r.candidates[0].url, `rtsp://admin:pw@${HOST}:${cam.port}/a`);
+        assert.equal(cam.state.failedAuth, 0);
+        assert.equal(budget.failures(HOST), 0);
+    } finally { await cam.close(); }
+});
+
+test('DESCRIBE 는 아무 경로나 200이고 SETUP 에서 거절하는 카메라(실기 HIipCamera): SETUP 까지 되는 경로를 찾는다', async () => {
+    const cam = await createMockRtsp({ connectionNonce: true, validPaths: ['/c'], unknownPathStatus: 200, unknownSetupStatus: 400 });
+    try {
+        const budget = new AuthBudget();
+        const r = await run(cam, { budget });
+        assert.equal(r.status, 'found');
+        assert.equal(r.candidates[0].url, `rtsp://admin:pw@${HOST}:${cam.port}/c`);
+        assert.equal(cam.state.failedAuth, 0);
+        assert.equal(budget.failures(HOST), 0);
+    } finally { await cam.close(); }
+});
+
+test('직접 입력 경로가 SETUP 에서 거절되면 path_not_found 이고 예산은 쓰지 않는다', async () => {
+    const cam = await createMockRtsp({ validPaths: ['/c'], unknownPathStatus: 200, unknownSetupStatus: 400 });
+    try {
+        const budget = new AuthBudget();
+        const r = await run(cam, { budget, path: '/x' });
+        assert.equal(r.status, 'path_not_found');
+        assert.equal(budget.failures(HOST), 0);
+    } finally { await cam.close(); }
+});
+
+test('nonce 를 연결마다 새로 주고 없는 경로에 401을 주는 카메라(실기 FX327): 첫 후보를 찾는다', async () => {
+    const cam = await createMockRtsp({ connectionNonce: true, validPaths: ['/a'], unknownPathStatus: 401 });
+    try {
+        const budget = new AuthBudget();
+        const r = await run(cam, { budget });
+        assert.equal(r.status, 'found');
+        assert.equal(r.candidates[0].url, `rtsp://admin:pw@${HOST}:${cam.port}/a`);
+        assert.equal(cam.state.failedAuth, 1, '로그인 실패로 보이는 것은 성향 감지 1회뿐');
+        assert.equal(budget.failures(HOST), 0);
+    } finally { await cam.close(); }
+});
+
 test('예산이 소진된 카메라에는 어떤 요청도 보내지 않는다', async () => {
     const cam = await createMockRtsp({ validPaths: ['/a'] });
     try {

@@ -62,11 +62,15 @@ async function findStream({
     /** DESCRIBE 1회. 로그인 실패(401)는 예산에 기록하고, 인증에 성공하면 예산을 초기화한다. */
     async function attempt(rtspPort, p) {
         const r = await describe({ host, port: rtspPort, path: p, username, password, timeoutMs: rtspTimeoutMs });
-        tried.push({ kind: 'rtsp', target: `${rtspPort}${p}`, result: r.status === 'unreachable' ? `연결 실패(${r.reason})` : String(r.code) });
+        const result = r.status === 'unreachable' ? `연결 실패(${r.reason})`
+            : r.status === 'setup_failed' ? `200, SETUP ${r.code || r.reason || '실패'}` : String(r.code);
+        tried.push({ kind: 'rtsp', target: `${rtspPort}${p}`, result });
         noteHeaders(r.headers);
         // 자격 증명을 보냈는데 성공/404(=인증은 통과)가 아니면 카메라가 로그인 실패로 셌을 수 있으니 보수적으로 1회 센다
-        // (401뿐 아니라 응답 없음/연결 끊김/해석 불가 포함)
-        if (r.authSent && (r.status === 'ok' || r.status === 'not_found')) budget.reset(host);
+        // (401뿐 아니라 응답 없음/연결 끊김/해석 불가 포함). DESCRIBE 는 통과하고 SETUP 만 거절된 경우는 계정이 맞으므로
+        // 세지 않는다 (SETUP 이 401 이면 보수적으로 센다)
+        const authPassed = r.status === 'ok' || r.status === 'not_found' || (r.status === 'setup_failed' && r.authAccepted && r.code !== 401);
+        if (r.authSent && authPassed) budget.reset(host);
         else if (r.authSent) budget.recordFailure(host);
         return r;
     }
@@ -135,13 +139,14 @@ async function findStream({
     const bogus = await attempt(rtspPort, BOGUS_PATH);
     if (unsupported(bogus)) return finishUnsupported();
     if (bogus.status === 'unreachable') return finish('unreachable');
-    if (bogus.status === 'ok') {
-        return finish('found', { candidates: [candidate(rtspPort, BOGUS_PATH, 'path', '(모든 경로에 응답하는 카메라)')] });
-    }
     if (bogus.status === 'unauthorized' && !username) {
         return finish('auth_failed', { ambiguous: false });
     }
-    const strict = bogus.status === 'not_found';   // 없는 경로에 404 를 준 경우에만 계정이 맞다는 증거가 된다 (403/500/해석 불가는 증거 아님)
+    // 없는 경로가 SETUP 까지 되는 카메라: 아무 경로나 재생된다. 확인용 경로 대신 실제 경로 후보를 찾아 저장하고, 없으면 확인용 경로를 쓴다
+    const acceptsAnyPath = bogus.status === 'ok';
+    // 계정이 맞다는 증거: 없는 경로에 404, 또는 DESCRIBE 는 통과(SETUP 만 거절)하거나 재생까지 된 경우 (403/500/해석 불가는 증거 아님)
+    const strict = bogus.status === 'not_found' || acceptsAnyPath
+        || (bogus.status === 'setup_failed' && bogus.authAccepted && bogus.code !== 401);
 
     for (const p of orderedPaths(settings, vendorHint)) {
         if (budget.isExhausted(host)) return finish('auth_failed', { ambiguous: true });
@@ -150,6 +155,9 @@ async function findStream({
         if (r.status === 'ok') return finish('found', { candidates: [candidate(rtspPort, p, 'path', p)] });
         if (r.status === 'unreachable') return finish('unreachable');
         if (r.status === 'unauthorized' && strict) return finish('auth_failed', { ambiguous: false });
+    }
+    if (acceptsAnyPath && !budget.isExhausted(host)) {
+        return finish('found', { candidates: [candidate(rtspPort, BOGUS_PATH, 'path', '(모든 경로에 응답하는 카메라)')] });
     }
     return budget.isExhausted(host) ? finish('auth_failed', { ambiguous: true }) : finish('path_not_found');
 }
