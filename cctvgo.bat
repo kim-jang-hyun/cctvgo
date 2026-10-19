@@ -36,6 +36,10 @@ taskkill /F /IM cctvgo-ffmpeg.exe /T >nul 2>&1
 taskkill /F /IM cloudflared.exe /T >nul 2>&1
 taskkill /F /IM cctvgo-service.exe /T >nul 2>&1
 taskkill /F /FI "WINDOWTITLE eq CCTVGO_NoSleep*" /T >nul 2>&1
+:: 절전 모드 방지는 창 없이 실행되므로 PID 파일로 이전 프로세스를 찾아 종료
+if exist "%LOG_DIR%\nosleep.pid" (
+    for /f "usebackq" %%p in ("%LOG_DIR%\nosleep.pid") do taskkill /F /PID %%p /FI "IMAGENAME eq powershell.exe" >nul 2>&1
+)
 timeout /t 2 > nul
 echo 기존 프로세스 종료 완료.
 echo.
@@ -48,7 +52,8 @@ echo [%date% %time%] 시스템 시작 >> %MAIN_LOG%
 
 :: 절전 모드 방지
 echo [0/3] 절전 모드 방지 설정 중...
-start "CCTVGO_NoSleep" powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "%~dp0utils\prevent_sleep.ps1" "%LOG_DIR%\nosleep.heartbeat"
+:: start /b로 이 창과 같은 콘솔에서 실행해, 이 창을 닫으면 함께 종료되게 한다
+start /b "CCTVGO_NoSleep" powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0utils\prevent_sleep.ps1" "%LOG_DIR%\nosleep.heartbeat" >nul 2>&1
 
 :: FFmpeg 스트림 모니터 실행
 echo [1/3] FFmpeg HLS 스트리밍 준비 중...
