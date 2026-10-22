@@ -126,3 +126,32 @@ test('잘못된 비밀번호 + 일부 경로만 응답하는 카메라: 자격 �
         assert.equal(cam.state.credentialed, 1);
     } finally { await cam.close(); }
 });
+
+test('자격 증명 없는 요청을 HTTP 401(HTML)로 거절하는 카메라(실기 FX327): Capabilities 의 미디어 경로로 인증해 찾는다', async () => {
+    const cam = await createMockOnvif({ httpAuthChallenge: true, mediaPaths: ['/onvif/Media'], capsMediaPath: '/onvif/Media' });
+    try {
+        const r = await getStreamUris({ host: HOST, username: 'admin', password: 'pw', ports: [cam.port], servicePaths: SERVICE });
+        assert.equal(r.status, 'ok');
+        assert.deepEqual(r.uris.map(u => u.name), ['main', 'sub']);
+        assert.equal(cam.state.failedAuth, 0);
+    } finally { await cam.close(); }
+});
+
+test('HTTP 401 카메라 + 틀린 비밀번호: Capabilities 의 미디어 경로에만 1번 보내고 auth_failed', async () => {
+    const cam = await createMockOnvif({ httpAuthChallenge: true, mediaPaths: ['/onvif/Media'], capsMediaPath: '/onvif/Media' });
+    try {
+        const r = await getStreamUris({ host: HOST, username: 'admin', password: 'wrong', ports: [cam.port], servicePaths: SERVICE });
+        assert.equal(r.status, 'auth_failed');
+        assert.equal(cam.state.credentialed, 1);
+        assert.deepEqual(cam.state.requests.filter(q => q.authed).map(q => q.path), ['/onvif/Media']);
+    } finally { await cam.close(); }
+});
+
+test('HTTP 401 카메라라도 Capabilities 가 알려 주지 않은 경로에는 자격 증명을 보내지 않는다', async () => {
+    // 이 카메라는 경로와 관계없이 401 을 주므로 401 만으로는 경로가 있다는 증거가 아니다
+    const cam = await createMockOnvif({ httpAuthChallenge: true, mediaPaths: ['/onvif/Media'], capsMediaPath: '/onvif/Media' });
+    try {
+        await getStreamUris({ host: HOST, username: 'admin', password: 'wrong', ports: [cam.port], servicePaths: SERVICE });
+        assert.ok(!cam.state.requests.some(q => q.authed && q.path !== '/onvif/Media'));
+    } finally { await cam.close(); }
+});

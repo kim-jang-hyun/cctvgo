@@ -11,6 +11,7 @@ const { tcpOpen } = require('./scan');
  *   그 요청이 명확한 성공이 아니면(어떤 Fault 든, 타임아웃이든) 즉시 auth_failed 로 끝낸다 (계정 잠금 방지).
  * - 계정(username)이 비어 있으면 자격 증명 요청 없이 unsupported.
  * - 자격 증명 없이 SOAP 응답이 오지 않는 경로/포트(404, 비 SOAP)는 건너뛰고, 끝까지 없으면 unsupported.
+ *   단, Capabilities 가 알려 준 미디어 경로의 HTTP 401 은 존재하는 경로로 본다.
  */
 
 const NS = 'xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:tds="http://www.onvif.org/ver10/device/wsdl" '
@@ -88,6 +89,7 @@ async function tryEndpoint({ host, port, servicePath, username, password, timeou
 
     // 미디어 서비스 경로: Capabilities 의 XAddr 경로만 사용한다 (호스트는 무시하고 항상 요청한 IP/포트 사용)
     const mediaPaths = [];
+    let capsMediaPath = null;
     const caps = await soapRequest({
         host, port, path: servicePath, timeoutMs,
         body: '<tds:GetCapabilities><tds:Category>Media</tds:Category></tds:GetCapabilities>',
@@ -95,7 +97,10 @@ async function tryEndpoint({ host, port, servicePath, username, password, timeou
     if (caps.ok && isEnvelope(caps.text)) {
         const m = /<(?:\w+:)?Media>[\s\S]*?<(?:\w+:)?XAddr>([^<]+)</.exec(caps.text);
         if (m) {
-            try { mediaPaths.push(new URL(decodeXml(m[1].trim())).pathname); } catch (e) { /* 무시 */ }
+            try {
+                capsMediaPath = new URL(decodeXml(m[1].trim())).pathname;
+                mediaPaths.push(capsMediaPath);
+            } catch (e) { /* 무시 */ }
         }
     }
     for (const p of ['/onvif/media_service', '/onvif/media', servicePath]) {
@@ -107,8 +112,11 @@ async function tryEndpoint({ host, port, servicePath, username, password, timeou
     const auth = { username, password };
     for (const mediaPath of mediaPaths) {
         // 자격 증명 없는 GetProfiles 로 경로 존재만 확인한다. SOAP Envelope 이면 (NotAuthorized Fault 여도) 존재하는 경로다.
+        // 자격 증명 없는 요청을 경로와 관계없이 HTTP 401 로 거절하는 카메라(실기 FX327)가 있어, 401 은 카메라가
+        // Capabilities 로 직접 알려 준 미디어 경로일 때만 존재하는 경로로 본다.
         const probe = await soapRequest({ host, port, path: mediaPath, body: '<trt:GetProfiles/>', timeoutMs });
-        if (!probe.ok || !isEnvelope(probe.text)) continue;
+        const exists = probe.ok && (isEnvelope(probe.text) || (probe.status === 401 && mediaPath === capsMediaPath));
+        if (!exists) continue;
 
         const pr = await soapRequest({ host, port, path: mediaPath, body: '<trt:GetProfiles/>', auth, offsetMs, timeoutMs });
         if (!pr.ok || !isEnvelope(pr.text) || isFault(pr.text)) return { status: 'auth_failed' };

@@ -23,6 +23,8 @@ async function createMockOnvif({
     faultText = 'Sender not Authorized', // NotAuthorized 가 없는 비표준 문구를 주려면 바꾼다 (예: 'Authentication failed for user')
     canonicalFault = true,               // false 면 ter:NotAuthorized 코드 없이 faultText 만 담은 Fault 를 돌려준다
     mediaPaths = ['/onvif/media_service'], // 미디어 요청(GetProfiles/GetStreamUri)에 응답하는 경로. 그 외 경로는 404
+    capsMediaPath = '/onvif/media_service', // GetCapabilities 의 Media XAddr 경로
+    httpAuthChallenge = false, // true 면 자격 증명 없는 요청은 장치 시각/Capabilities 외에 경로와 관계없이 HTTP 401(HTML)로 거절한다 (실기 FX327)
 } = {}) {
     // failedAuth: 자격 증명(Security 헤더)을 실은 요청이 거절된 횟수 / credentialed: 자격 증명을 실은 GetProfiles·GetStreamUri 횟수
     const state = { requests: [], failedAuth: 0, credentialed: 0 };
@@ -55,7 +57,13 @@ async function createMockOnvif({
         req.on('data', d => { body += d; });
         req.on('end', () => {
             const op = (/<(?:\w+:)?(GetSystemDateAndTime|GetCapabilities|GetProfiles|GetStreamUri)\b/.exec(body) || [])[1];
-            state.requests.push({ path: req.url, op });
+            const authed = /<(?:\w+:)?UsernameToken\b/.test(body);
+            state.requests.push({ path: req.url, op, authed });
+            const deviceInfo = req.url === '/onvif/device_service' && (op === 'GetSystemDateAndTime' || op === 'GetCapabilities');
+            if (httpAuthChallenge && !deviceInfo && !authed) {
+                res.writeHead(401, { 'WWW-Authenticate': 'Digest qop="auth", realm="IP Camera(FX327)", nonce="abc", stale="FALSE"', 'Content-Type': 'text/html' });
+                return res.end('<html><head><title>Document Error: Unauthorized</title></head><body><h2>Access Error: 401 -- Unauthorized</h2></body></html>');
+            }
             if (req.method !== 'POST' || !['/onvif/device_service', ...mediaPaths].includes(req.url) || !op) {
                 res.writeHead(404);
                 return res.end();
@@ -73,7 +81,7 @@ async function createMockOnvif({
             }
             if (op === 'GetCapabilities') {
                 return send(200, wrap('<tds:GetCapabilitiesResponse><tds:Capabilities><tt:Media>'
-                    + `<tt:XAddr>http://0.0.0.0:${server.address().port}/onvif/media_service</tt:XAddr>`
+                    + `<tt:XAddr>http://0.0.0.0:${server.address().port}${capsMediaPath}</tt:XAddr>`
                     + '</tt:Media></tds:Capabilities></tds:GetCapabilitiesResponse>'));
             }
             const hasCredentials = /<(?:\w+:)?UsernameToken\b/.test(body);
