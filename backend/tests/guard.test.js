@@ -117,7 +117,7 @@ test('AuthBudget 영속화: 저장 실패(쓰기 불가 경로)에도 예외 없
     try {
         // persistPath 자체가 디렉터리이면 rename 이 실패한다
         const b = new AuthBudget({ persistPath: dir });
-        assert.doesNotThrow(() => { b.recordFailure('10.0.0.1'); b.recordFailure('10.0.0.1'); b.reset('10.0.0.9'); });
+        assert.doesNotThrow(() => { for (let i = 0; i < b.max; i++) b.recordFailure('10.0.0.1'); b.reset('10.0.0.9'); });
         assert.equal(b.isExhausted('10.0.0.1'), true);
         const missing = new AuthBudget({ persistPath: path.join(dir, '없는폴더', 'b.json') });
         assert.doesNotThrow(() => missing.recordFailure('10.0.0.1'));

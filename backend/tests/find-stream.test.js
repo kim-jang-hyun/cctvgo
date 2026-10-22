@@ -9,6 +9,11 @@ const { createMockOnvif } = require('./helpers/mock-onvif');
 const HOST = '127.0.0.1';
 const paths = list => list.map(p => ({ path: p, vendors: [] }));
 const settingsFor = (list, onvifPorts = []) => ({ paths: paths(list), onvifPorts, onvifServicePaths: ['/onvif/device_service'] });
+// 기본 인증 실패 예산. 예산을 소진시키는 테스트는 이 값에 맞춰 경로 후보 수를 만든다
+const MAX = new AuthBudget().max;
+// 성향 감지 1회 + 앞의 MAX-1 개로 예산이 소진되고, 마지막 후보(LAST)는 시도하지 않는다
+const BUDGET_PATHS = Array.from({ length: MAX }, (_, i) => `/p${i + 1}`);
+const LAST = BUDGET_PATHS[MAX - 1];
 
 function run(cam, extra = {}) {
     return findStream({
@@ -38,26 +43,26 @@ test('잘못된 경로에 404를 주는 카메라: 후보를 끝까지 시도해
     } finally { await cam.close(); }
 });
 
-test('비밀번호가 틀리면 인증 실패는 최대 2회에서 멈춘다', async () => {
-    const cam = await createMockRtsp({ validPaths: ['/b'] });
+test('비밀번호가 틀리면 인증 실패는 예산(MAX회)에서 멈춘다', async () => {
+    const cam = await createMockRtsp({ validPaths: [LAST] });
     try {
         const budget = new AuthBudget();
-        const r = await run(cam, { password: 'wrong', budget });
+        const r = await run(cam, { password: 'wrong', budget, settings: settingsFor(BUDGET_PATHS) });
         assert.equal(r.status, 'auth_failed');
         assert.equal(r.ambiguous, true);
-        assert.equal(cam.state.failedAuth, 2);
+        assert.equal(cam.state.failedAuth, MAX);
         assert.equal(budget.isExhausted(HOST), true);
     } finally { await cam.close(); }
 });
 
-test('경로가 틀려도 401을 주는 카메라: 예산(2회) 안에서만 시도한다', async () => {
-    const cam = await createMockRtsp({ validPaths: ['/b'], unknownPathStatus: 401 });
+test('경로가 틀려도 401을 주는 카메라: 예산(MAX회) 안에서만 시도한다', async () => {
+    const cam = await createMockRtsp({ validPaths: [LAST], unknownPathStatus: 401 });
     try {
-        const r = await run(cam);   // 후보 순서 /a,/b,/c → 성향 감지 1회 + /a 1회로 예산 소진
+        const r = await run(cam, { settings: settingsFor(BUDGET_PATHS) });
         assert.equal(r.status, 'auth_failed');
         assert.equal(r.ambiguous, true);
-        assert.equal(cam.state.failedAuth, 2);
-        assert.ok(!cam.state.requests.some(q => q.path === '/b' && q.authed), '/b 는 시도하지 않는다');
+        assert.equal(cam.state.failedAuth, MAX);
+        assert.ok(!cam.state.requests.some(q => q.path === LAST && q.authed), '마지막 후보는 시도하지 않는다');
     } finally { await cam.close(); }
 });
 
@@ -122,7 +127,7 @@ test('예산이 소진된 카메라에는 어떤 요청도 보내지 않는다',
     const cam = await createMockRtsp({ validPaths: ['/a'] });
     try {
         const budget = new AuthBudget();
-        budget.recordFailure(HOST); budget.recordFailure(HOST);
+        for (let i = 0; i < MAX; i++) budget.recordFailure(HOST);
         const r = await run(cam, { budget });
         assert.equal(r.status, 'auth_locked');
         assert.ok(r.retryAfterSec > 0);
@@ -193,14 +198,14 @@ test('ONVIF가 알려 준 주소가 실제로 접속되지 않으면 채택하�
     } finally { await rtsp.close(); await onvif.close(); }
 });
 
-test('ONVIF 인증 실패 + RTSP 인증 실패를 합쳐도 카메라가 본 인증 실패는 2회 이하', async () => {
+test('ONVIF 인증 실패 + RTSP 인증 실패를 합쳐도 카메라가 본 인증 실패는 예산 이하', async () => {
     const rtsp = await createMockRtsp({ validPaths: ['/b'] });
     const onvif = await createMockOnvif({ rtspPort: rtsp.port });
     try {
         const budget = new AuthBudget();
-        const r = await run(rtsp, { password: 'wrong', budget, settings: settingsFor(['/a', '/b'], [onvif.port]) });
+        const r = await run(rtsp, { password: 'wrong', budget, settings: settingsFor(BUDGET_PATHS, [onvif.port]) });
         assert.equal(r.status, 'auth_failed');
-        assert.ok(onvif.state.failedAuth + rtsp.state.failedAuth <= 2, `${onvif.state.failedAuth}+${rtsp.state.failedAuth}`);
+        assert.ok(onvif.state.failedAuth + rtsp.state.failedAuth <= MAX, `${onvif.state.failedAuth}+${rtsp.state.failedAuth}`);
         assert.equal(budget.isExhausted(HOST), true);
     } finally { await rtsp.close(); await onvif.close(); }
 });
@@ -220,14 +225,14 @@ test('진단 정보에는 호스트/서버 헤더/시도 목록이 있고 비밀
     } finally { await cam.close(); }
 });
 
-test('비표준 문구로 거절하는 ONVIF + 비밀번호 오류 RTSP: 카메라가 본 인증 실패는 합쳐서 2회 이하', async () => {
+test('비표준 문구로 거절하는 ONVIF + 비밀번호 오류 RTSP: 카메라가 본 인증 실패는 합쳐서 예산 이하', async () => {
     const rtsp = await createMockRtsp({ validPaths: ['/b'] });
     const onvif = await createMockOnvif({ rtspPort: rtsp.port, canonicalFault: false, faultText: 'Authentication failed for user' });
     try {
         const budget = new AuthBudget();
         const r = await run(rtsp, { password: 'wrong', budget, settings: settingsFor(['/a', '/b', '/c'], [onvif.port]) });
         assert.equal(r.status, 'auth_failed');
-        assert.ok(onvif.state.failedAuth + rtsp.state.failedAuth <= 2, `${onvif.state.failedAuth}+${rtsp.state.failedAuth}`);
+        assert.ok(onvif.state.failedAuth + rtsp.state.failedAuth <= MAX, `${onvif.state.failedAuth}+${rtsp.state.failedAuth}`);
         assert.equal(onvif.state.credentialed, 1);
     } finally { await rtsp.close(); await onvif.close(); }
 });
@@ -249,16 +254,17 @@ test('아이디가 없으면 ONVIF 를 시도하지 않고 예산도 쓰지 않�
 for (const code of [500, 403]) {
     test(`없는 경로에 ${code}를 주는 카메라: 후보의 401을 단정적인 비밀번호 오류(ambiguous:false)로 확정하지 않는다`, async () => {
         // 성향 감지가 404 가 아니므로 계정이 맞다는 증거가 아니다(strict=false). 자격 증명을 실은 ${code} 도 예산 1회로 센다.
-        // /a 의 401 로 예산 2회가 소진되면 ambiguous 로 멈추고, 그 뒤 /b 에는 자격 증명을 보내지 않는다.
-        const cam = await createMockRtsp({ validPaths: ['/b'], unknownPathStatus: code, pathOverrides: { '/a': 401 } });
+        // 앞 후보들의 401 로 예산이 소진되면 ambiguous 로 멈추고, 그 뒤 마지막 후보에는 자격 증명을 보내지 않는다.
+        const pathOverrides = Object.fromEntries(BUDGET_PATHS.slice(0, MAX - 1).map(p => [p, 401]));
+        const cam = await createMockRtsp({ validPaths: [LAST], unknownPathStatus: code, pathOverrides });
         try {
             const budget = new AuthBudget();
-            const r = await run(cam, { budget });
+            const r = await run(cam, { budget, settings: settingsFor(BUDGET_PATHS) });
             assert.equal(r.status, 'auth_failed');
             assert.equal(r.ambiguous, true);
             assert.equal(budget.isExhausted(HOST), true);
-            assert.ok(cam.state.failedAuth <= 2);
-            assert.ok(!cam.state.requests.some(q => q.path === '/b' && q.authed));
+            assert.ok(cam.state.failedAuth <= MAX);
+            assert.ok(!cam.state.requests.some(q => q.path === LAST && q.authed));
         } finally { await cam.close(); }
     });
 }
@@ -270,7 +276,7 @@ test('자격 증명을 보낸 뒤 연결이 끊기거나 응답을 해석할 수
             const budget = new AuthBudget();
             const r = await run(cam, { budget });
             const authed = cam.state.requests.filter(q => q.authed).length;
-            assert.ok(authed <= 2, `${JSON.stringify(opts)} authed=${authed}`);
+            assert.ok(authed <= MAX, `${JSON.stringify(opts)} authed=${authed}`);
             assert.equal(budget.failures(HOST), authed, JSON.stringify(opts));
             assert.notEqual(r.status, 'found');
         } finally { await cam.close(); }
@@ -325,9 +331,9 @@ test('SHA-256 과 MD5 챌린지가 함께 오면 MD5 로 찾는다', async () =>
 });
 
 test('예산이 소진된 auth_failed 에는 retryAfterSec 가 있고, 소진 전에는 없다', async () => {
-    const cam = await createMockRtsp({ validPaths: ['/b'] });
+    const cam = await createMockRtsp({ validPaths: [LAST] });
     try {
-        const r = await run(cam, { password: 'wrong' });
+        const r = await run(cam, { password: 'wrong', settings: settingsFor(BUDGET_PATHS) });
         assert.equal(r.status, 'auth_failed');
         assert.ok(r.retryAfterSec > 0);
     } finally { await cam.close(); }
@@ -337,4 +343,23 @@ test('예산이 소진된 auth_failed 에는 retryAfterSec 가 있고, 소진 �
         assert.equal(r.status, 'auth_failed');
         assert.equal(r.retryAfterSec, undefined);
     } finally { await cam2.close(); }
+});
+
+test('RTSP 가 꺼진 카메라(모든 요청에 405): 몇 번만 확인하고 rtsp_disabled 로 끝낸다', async () => {
+    const cam = await createMockRtsp({ requireAuth: false, validPaths: [], unknownPathStatus: 405 });
+    try {
+        const many = Array.from({ length: 30 }, (_, i) => `/p${i}`);
+        const r = await run(cam, { settings: settingsFor(many) });
+        assert.equal(r.status, 'rtsp_disabled');
+        assert.ok(cam.state.requests.length <= 6, `요청 ${cam.state.requests.length}회`);
+    } finally { await cam.close(); }
+});
+
+test('없는 경로에만 405를 주는 카메라: 실제 경로는 계속 찾는다', async () => {
+    const cam = await createMockRtsp({ requireAuth: false, validPaths: ['/c'], unknownPathStatus: 405 });
+    try {
+        const r = await run(cam);
+        assert.equal(r.status, 'found');
+        assert.equal(r.candidates[0].url, `rtsp://admin:pw@${HOST}:${cam.port}/c`);
+    } finally { await cam.close(); }
 });

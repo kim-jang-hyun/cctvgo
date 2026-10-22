@@ -17,6 +17,10 @@ const { orderedPaths } = require('./paths');
  */
 
 const BOGUS_PATH = '/cctvgo-probe-test';
+// RTSP 기능을 꺼 둔 카메라는 포트는 열려 있어도 DESCRIBE 자체를 405(허용 안 됨)/501(미구현)로 거절한다
+const METHOD_REJECTED = new Set([405, 501]);
+// 없는 경로와 후보 경로가 이 횟수만큼 연달아 거절되면 RTSP 가 꺼진 것으로 보고 멈춘다
+const DISABLED_CONFIRM = 5;
 
 function buildDiagnostics(host, vendorHint, info, tried) {
     return [
@@ -148,10 +152,13 @@ async function findStream({
     const strict = bogus.status === 'not_found' || acceptsAnyPath
         || (bogus.status === 'setup_failed' && bogus.authAccepted && bogus.code !== 401);
 
+    let rejected = METHOD_REJECTED.has(bogus.code) ? 1 : 0;
     for (const p of orderedPaths(settings, vendorHint)) {
         if (budget.isExhausted(host)) return finish('auth_failed', { ambiguous: true });
         const r = await attempt(rtspPort, p);
         if (unsupported(r)) return finishUnsupported();
+        rejected = rejected && METHOD_REJECTED.has(r.code) ? rejected + 1 : 0;
+        if (rejected > DISABLED_CONFIRM) return finish('rtsp_disabled');
         if (r.status === 'ok') return finish('found', { candidates: [candidate(rtspPort, p, 'path', p)] });
         if (r.status === 'unreachable') return finish('unreachable');
         if (r.status === 'unauthorized' && strict) return finish('auth_failed', { ambiguous: false });

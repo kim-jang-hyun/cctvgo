@@ -40,7 +40,7 @@
       <input v-model.trim="username" autocomplete="off" />
       <label>카메라 비밀번호</label>
       <input v-model="password" type="password" autocomplete="off" @keyup.enter="runProbe(false)" />
-      <p class="notice">카메라 잠금 방지를 위해 로그인 실패는 카메라당 최대 2회까지만 시도합니다. 카메라 자체 웹페이지에서 로그인되는 아이디/비밀번호인지 먼저 확인하세요.</p>
+      <p class="notice">카메라 자체 웹페이지에서 로그인되는 아이디/비밀번호인지 먼저 확인하세요. 카메라가 잠기지 않도록 로그인 실패가 2회 쌓이면 그 카메라는 30분 동안 다시 시도할 수 없습니다.</p>
       <div class="row">
         <button @click="reset">처음으로</button>
         <button class="primary" :disabled="!username" @click="runProbe(false)">주소 찾기</button>
@@ -251,20 +251,28 @@ function messageFor(r) {
       if (r.authUnsupported) {
         return '이 카메라는 지원하지 않는 로그인 방식(Digest SHA-256 등)을 사용합니다. 카메라 설명서의 RTSP 주소를 cctv.txt에 직접 입력해 주세요.';
       }
-      const wait = r.retryAfterSec > 0 ? ` 약 ${Math.max(1, Math.ceil(r.retryAfterSec / 60))}분 뒤에 다시 시도할 수 있습니다.` : '';
+      const wait = r.retryAfterSec > 0 ? ` ${lockedNotice(r.retryAfterSec)}` : '';
       return (r.ambiguous
         ? `아이디/비밀번호 또는 경로 문제일 수 있습니다.${vendor} 카메라 자체 웹페이지에서 로그인되는 아이디/비밀번호인지 먼저 확인하고, 안 되면 "주소 직접 입력"을 사용하세요.`
         : '카메라 아이디 또는 비밀번호가 맞지 않습니다. 카메라 자체 웹페이지에서 로그인되는 아이디/비밀번호인지 먼저 확인하세요.') + wait;
     }
-    case 'auth_locked': {
-      const min = Math.max(1, Math.ceil((r.retryAfterSec || 0) / 60));
-      return `카메라 잠금 방지를 위해 약 ${min}분 뒤에 다시 시도하세요. 그 사이 카메라 자체 웹페이지에서 아이디/비밀번호를 확인해 보세요.`;
-    }
+    case 'auth_locked':
+      return `이 카메라는 최근 로그인 실패가 2회 쌓여 잠시 쉬는 중입니다. ${lockedNotice(r.retryAfterSec || 0)}`;
+    case 'rtsp_disabled':
+      return `카메라의 RTSP 기능이 꺼져 있는 것 같습니다.${vendor} 카메라 앱이나 자체 웹페이지의 설정(네트워크/스트리밍 등)에서 RTSP를 켠 뒤 다시 시도하세요.`;
     case 'path_not_found':
       return `카메라는 응답했지만 영상 주소를 찾지 못했습니다.${vendor} 카메라 설명서의 RTSP 주소를 확인해 "주소 직접 입력"을 사용하세요.`;
     default:
       return '주소를 찾지 못했습니다.';
   }
+}
+
+// 실패가 2회 쌓여 대기에 들어갔을 때의 안내. 다시 시도할 수 있는 시각도 함께 보여 준다
+function lockedNotice(retryAfterSec) {
+  const min = Math.max(1, Math.ceil(retryAfterSec / 60));
+  const at = new Date(Date.now() + retryAfterSec * 1000).toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' });
+  return `카메라 자체 잠금을 막기 위해 약 ${min}분 뒤(${at}쯤)부터 다시 시도할 수 있습니다. `
+    + '그 사이 카메라 웹페이지에서 아이디/비밀번호를 확인해 두세요. 다른 카메라는 지금 바로 찾을 수 있습니다.';
 }
 
 // 화면에는 비밀번호를 가린 주소를 보여 준다
