@@ -1,7 +1,7 @@
 <template>
   <div class="finder">
     <header class="finder-head">
-      <router-link to="/" class="back">← 영상 화면으로</router-link>
+      <router-link to="/settings" class="back">← 설정으로</router-link>
       <h2>카메라 주소 찾기</h2>
     </header>
 

@@ -27,6 +27,7 @@ const express = require('express');
 const session = require('express-session');
 const fs = require('fs');
 const path = require('path');
+const { createPasswordStore } = require('./settings/password-store');
 
 let BASE_DIR;
 let HLS_STATIC_PATH;
@@ -75,6 +76,7 @@ app.use(session({
 }));
 
 const CONFIG_PATH = path.join(BASE_DIR, 'config.json');
+const passwordStore = createPasswordStore(CONFIG_PATH);
 const CCTV_CONFIG_PATH = path.join(BASE_DIR, 'cctv.txt');
 
 /**
@@ -119,12 +121,13 @@ function readCCTVConfig() {
 
 // 로그인 처리 API
 app.post('/login', (req, res) => {
-  if (!fs.existsSync(CONFIG_PATH)) return res.status(500).send('Config not found');
-  const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+  const password = passwordStore.get();
+  if (password === null) return res.status(500).send('Config not found');
 
   const inputPassword = req.body.password;
-  if (inputPassword === config.password) {
+  if (inputPassword === password) {
     req.session.authenticated = true;
+    req.session.passwordTag = passwordStore.tag();
     return res.sendStatus(200);
   } else {
     return res.status(401).send('비밀번호가 틀렸습니다.');
@@ -159,11 +162,16 @@ app.get('/api/get-channel-list', authMiddleware, (req, res) => {
 const { registerFinderRoutes } = require('./finder/routes');
 registerFinderRoutes(app, { authMiddleware, baseDir: BASE_DIR, cctvPath: CCTV_CONFIG_PATH });
 
+// 설정 화면 API (비밀번호 변경)
+const { registerSettingsRoutes } = require('./settings/routes');
+registerSettingsRoutes(app, { authMiddleware, store: passwordStore });
+
 // 인증 미들웨어
 function authMiddleware(req, res, next) {
   // 로그인 페이지와 정적 자산은 인증 없이 접근 허용
+  // 비밀번호가 바뀌면 그 전에 로그인한 세션은 태그가 달라 로그아웃된다
   if (
-    req.session.authenticated ||
+    (req.session.authenticated && req.session.passwordTag === passwordStore.tag()) ||
     req.path === '/login' ||
     req.path.startsWith('/login/') ||
     req.path.startsWith('/assets') ||

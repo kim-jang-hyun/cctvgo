@@ -1,7 +1,12 @@
 <template>
   <div class="page-wrapper">
-    <h2>실시간 CCTV 스트리밍</h2>
-    <router-link to="/finder" class="finder-link">카메라 주소 찾기</router-link>
+    <div class="title-row">
+      <h2>실시간 CCTV 스트리밍</h2>
+      <!-- 휴대폰 1채널 뷰에서는 아래 카메라 선택 줄 끝에 둔다 -->
+      <router-link v-if="!(isMobile && cameraList)" to="/settings" class="settings-link" aria-label="설정" title="설정">
+        <SettingsIcon />
+      </router-link>
+    </div>
 
     <!-- 모바일: 한 화면에 1개 전체 화면 + 카메라 선택 리스트 -->
     <template v-if="isMobile && cameraList">
@@ -29,6 +34,9 @@
             {{ cam.name || '카메라 ' + (i + 1) }}
           </button>
         </div>
+        <router-link to="/settings" class="tab-settings" aria-label="설정" title="설정">
+          <SettingsIcon />
+        </router-link>
       </div>
     </template>
 
@@ -64,6 +72,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import Hls from 'hls.js';
 import draggable from 'vuedraggable';
+import SettingsIcon from '../components/SettingsIcon.vue';
 
 // --- 상수 ---
 const ROWS = 2;
@@ -257,36 +266,36 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
+/* 제목과 설정 아이콘을 같은 높이에 두려고 한 줄로 묶는다. 여백은 h2 기본 위 여백 + 기존 아래 10px */
+.title-row {
+  position: relative;
+  margin: 20px 0 10px;
+}
+
 h2 {
   width: 100%;
+  margin: 0;
   color: #213547;   /* body 배경이 항상 흰색이라 다크 모드 기본 글자색(흰색)을 쓰면 안 보인다 */
-  margin-bottom: 10px;
   word-break: keep-all;
   white-space: nowrap;
   overflow: visible;
   text-align: center;
 }
 
-.finder-link {
+/* 설치할 때만 쓰는 설정이라 제목 줄 오른쪽 끝에 아이콘만 작게 둔다 */
+.settings-link {
   position: absolute;
-  top: 8px;
-  right: 10px;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
   z-index: 10;
-  padding: 4px 10px;
-  font-size: 12px;
-  color: #fff;
-  background: rgba(0, 123, 255, 0.9);
-  border-radius: 4px;
-  text-decoration: none;
+  display: flex;
+  padding: 4px;
+  color: #888;
 }
 
-/* 좁은 화면에서는 가운데 제목과 겹치므로 제목 아래 줄로 내린다 (MOBILE_BREAKPOINT 와 같은 값) */
-@media (max-width: 768px) {
-  .finder-link {
-    position: static;
-    align-self: center;
-    margin-bottom: 6px;
-  }
+.settings-link:hover {
+  color: #007bff;
 }
 
 /* --- 데스크톱 그리드 --- */
@@ -381,6 +390,8 @@ h2 {
 
 .mobile-tab-selector {
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
   width: 100%;
   background: #1a1a1a;
   padding: 10px 0;
@@ -388,6 +399,8 @@ h2 {
 }
 
 .tab-inner {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-wrap: nowrap;
   overflow-x: auto;
@@ -396,6 +409,14 @@ h2 {
   padding: 0 10px;
   -webkit-overflow-scrolling: touch;
   gap: 8px;
+}
+
+/* 카메라 탭이 옆으로 스크롤돼도 오른쪽 끝에 고정 */
+.tab-settings {
+  flex-shrink: 0;
+  display: flex;
+  padding: 6px 12px 6px 4px;
+  color: #aaa;
 }
 
 .tab-inner::-webkit-scrollbar {
