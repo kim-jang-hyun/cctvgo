@@ -97,7 +97,7 @@ const login = async () => {
   padding: 12px;
   border-radius: 8px;
   border: none;
-  font-size: 14px;
+  font-size: 16px;   /* iOS 는 16px 보다 작은 입력 칸을 누르면 화면을 확대하고, 로그인 뒤에도 확대가 남는다 */
 }
 
 .input {

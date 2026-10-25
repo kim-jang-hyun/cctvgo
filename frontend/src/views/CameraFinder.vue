@@ -336,7 +336,8 @@ function reset() {
 .card { background: #fff; color: #222; border: 1px solid #ddd; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
 .card.center { align-items: center; text-align: center; }
 label { font-size: 13px; font-weight: 600; margin-top: 4px; }
-input, select, textarea { width: 100%; box-sizing: border-box; padding: 8px 10px; font-size: 15px; border: 1px solid #bbb; border-radius: 6px; }
+/* iOS 는 16px 보다 작은 입력 칸을 누르면 화면을 확대한다 */
+input, select, textarea { width: 100%; box-sizing: border-box; padding: 8px 10px; font-size: 16px; border: 1px solid #bbb; border-radius: 6px; }
 textarea { font-family: monospace; font-size: 12px; }
 button, .btn { padding: 8px 14px; font-size: 14px; border: 1px solid #bbb; background: #f5f5f5; color: #222; border-radius: 6px; cursor: pointer; text-decoration: none; display: inline-block; }
 button.primary { background: #007bff; border-color: #007bff; color: #fff; }
