@@ -13,9 +13,12 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* iOS Safari 의 100vh 는 주소창이 접혔을 때 높이라 실제 화면보다 길다.
+   문서가 화면보다 길면 문서 전체가 밀린 채 남아 화면 맨 위가 가려지므로 보이는 높이(dvh)를 쓴다 */
 body {
   margin: 0;
   height: 100vh;
+  height: 100dvh;
   background: white;
   overflow: hidden;
 }
@@ -23,6 +26,7 @@ body {
 #app {
   text-align: center;
   height: 100vh;
+  height: 100dvh;
 }
 
 a {
