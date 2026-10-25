@@ -326,7 +326,10 @@ function reset() {
 </script>
 
 <style scoped>
-.finder { max-width: 560px; margin: 0 auto; padding: 16px; box-sizing: border-box; }
+/* body/#app 이 overflow: hidden 이라 이 화면이 직접 스크롤해야 한다.
+   body 배경은 항상 흰색이므로 글자색과 정렬도 #app 기본값 대신 직접 지정한다 */
+.finder { height: 100dvh; overflow-y: auto; padding: 16px; box-sizing: border-box; text-align: left; color: #213547; }
+.finder > * { max-width: 560px; margin-left: auto; margin-right: auto; }
 .finder-head { margin-bottom: 12px; }
 .finder-head h2 { margin: 8px 0 0; }
 .back { font-size: 14px; color: #007bff; text-decoration: none; }

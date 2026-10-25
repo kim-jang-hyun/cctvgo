@@ -203,8 +203,12 @@ function initPlayers() {
 }
 
 // --- 모바일 감지 ---
+// iOS Safari 는 화면을 돌렸을 때 resize 시점의 innerWidth 가 아직 이전 값일 수 있어,
+// 회전 직후에도 정확한 미디어쿼리 change 이벤트로 판정한다 (resize 는 보조)
+const mobileQuery = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`);
+
 function checkMobile() {
-  isMobile.value = window.innerWidth <= MOBILE_BREAKPOINT;
+  isMobile.value = mobileQuery.matches;
 }
 
 // --- watch ---
@@ -219,6 +223,7 @@ watch(isMobile, () => {
 // --- lifecycle ---
 onMounted(async () => {
   checkMobile();
+  mobileQuery.addEventListener('change', checkMobile);
   window.addEventListener('resize', checkMobile);
 
   const cameraNameList = await getCameraList();
@@ -229,6 +234,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  mobileQuery.removeEventListener('change', checkMobile);
   window.removeEventListener('resize', checkMobile);
   if (mobileHlsInstance) {
     mobileHlsInstance.destroy();
@@ -253,6 +259,7 @@ onUnmounted(() => {
 
 h2 {
   width: 100%;
+  color: #213547;   /* body 배경이 항상 흰색이라 다크 모드 기본 글자색(흰색)을 쓰면 안 보인다 */
   margin-bottom: 10px;
   word-break: keep-all;
   white-space: nowrap;
@@ -271,6 +278,15 @@ h2 {
   background: rgba(0, 123, 255, 0.9);
   border-radius: 4px;
   text-decoration: none;
+}
+
+/* 좁은 화면에서는 가운데 제목과 겹치므로 제목 아래 줄로 내린다 (MOBILE_BREAKPOINT 와 같은 값) */
+@media (max-width: 768px) {
+  .finder-link {
+    position: static;
+    align-self: center;
+    margin-bottom: 6px;
+  }
 }
 
 /* --- 데스크톱 그리드 --- */
@@ -318,25 +334,48 @@ h2 {
   cursor: pointer;
 }
 
+/* 터치 기기(가로모드 휴대폰 등)에서는 iOS 컨트롤 좌측 상단의 전체보기 버튼을 가리지 않도록
+   이름표를 영상 위 별도 줄에 둔다. 컨트롤이 아래에 있는 PC 에서는 영상 위에 겹쳐 둔다 */
+@media (hover: none) and (pointer: coarse) {
+  .video-container {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .video-container .video-label {
+    position: static;
+    align-self: flex-start;
+    margin: 2px 4px;
+  }
+
+  .video-player {
+    flex: 1;
+    min-height: 0;
+    height: auto;
+  }
+}
+
 /* --- 모바일 --- */
 .mobile-video-wrap {
   flex: 1;
-  position: relative;
+  display: flex;
+  flex-direction: column;
   width: 100%;
   min-height: 0;
   background: #000;
 }
 
+/* 영상 위에 겹치면 iOS 컨트롤 좌측 상단의 전체보기 버튼을 가리므로 영상 위 별도 줄에 둔다 */
 .mobile-label {
-  position: absolute;
-  top: 8px;
-  left: 12px;
-  z-index: 1;
+  position: static;
+  align-self: flex-start;
+  margin: 6px 8px;
 }
 
 .mobile-video {
+  flex: 1;
   width: 100%;
-  height: 100%;
+  min-height: 0;
   object-fit: contain;
 }
 
