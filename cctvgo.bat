@@ -55,20 +55,17 @@ echo [0/3] 절전 모드 방지 설정 중...
 :: start /b로 이 창과 같은 콘솔에서 실행해, 이 창을 닫으면 함께 종료되게 한다
 start /b "CCTVGO_NoSleep" powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0utils\prevent_sleep.ps1" "%LOG_DIR%\nosleep.heartbeat" >nul 2>&1
 
-:: FFmpeg 스트림 모니터 실행
-echo [1/3] FFmpeg HLS 스트리밍 준비 중...
-:: start /b를 사용하여 새 창 없이 실행하고 로그는 별도 저장
-start /b "FFmpeg_Master" cmd /c "%~dp0start_ffmpeg.bat >> %~dp0logs\ffmpeg_master.log 2>&1"
-timeout /t 3 > nul
+:: 카메라 영상(FFmpeg)은 CCTVGO 서비스가 cctv.txt 를 읽어 직접 켜고 끈다
+:: (웹 화면에서 카메라를 추가/수정/삭제하면 재시작 없이 그 카메라 영상만 바뀐다)
 
 :: Cloudflare Tunnel 실행
-echo [2/3] Cloudflare Tunnel 보안 연결 중...
+echo [1/2] Cloudflare Tunnel 보안 연결 중...
 :: start /b를 사용하여 새 창 없이 실행하고 로그는 별도 저장
 start /b "Cloudflare" cmd /c "%~dp0cloudflare\start_tunnel.bat >> %~dp0logs\tunnel.log 2>&1"
 timeout /t 3 > nul
 
 :: CCTVGO Service 실행
-echo [3/3] CCTVGO 메인 서비스 기동 중...
+echo [2/2] CCTVGO 메인 서비스 기동 중 (카메라 영상 포함)...
 :: start /b를 사용하여 새 창 없이 실행하고 로그는 별도 저장
 start /b "CCTVGO_Service" cmd /c "%~dp0cctvgo-service.exe >> %~dp0logs\service.log 2>&1"
 timeout /t 3 > nul
@@ -77,6 +74,9 @@ echo.
 echo -----------------------------------------------------
 echo [현재 실행 프로세스 상태 점검]
 echo -----------------------------------------------------
+
+:: 서비스와 영상은 뜨는 데 10초 이상 걸릴 수 있다. 처음 약 30초(5초 x 6회)는 없으면 "시작 중"으로 보고 자주 다시 확인한다
+set "FAST_CHECKS=6"
 
 :monitor_loop
 cls
@@ -93,9 +93,17 @@ echo -----------------------------------------------------
 set "FF_COUNT=0"
 for /f %%c in ('tasklist /fi "imagename eq cctvgo-ffmpeg.exe" /nh ^| find /c "cctvgo-ffmpeg.exe"') do set "FF_COUNT=%%c"
 
-:: 개수에 따라 출력 (if-else 구조 명확화)
-if !FF_COUNT! gtr 0 (
-    echo   - FFmpeg Streams     : 정상 작동 중 ^(!FF_COUNT!개^)
+:: 등록된 카메라 수 (cctv.txt 에서 빈 줄과 # 주석을 뺀 줄 수)
+set "CAM_COUNT=0"
+for /f "delims=" %%a in ('powershell -NoProfile -Command "@(Get-Content -LiteralPath '%~dp0cctv.txt' -ErrorAction SilentlyContinue | Where-Object { $_.Trim() -ne '' -and -not $_.Trim().StartsWith('#') }).Count"') do set "CAM_COUNT=%%a"
+
+:: 개수에 따라 출력 (카메라가 0대면 영상이 없는 것이 정상)
+if !CAM_COUNT! equ 0 (
+    echo   - FFmpeg Streams     : 등록된 카메라 없음 - 웹 화면 설정에서 추가
+) else if !FF_COUNT! gtr 0 (
+    echo   - FFmpeg Streams     : 정상 작동 중 ^(!FF_COUNT!/!CAM_COUNT!개^)
+) else if !FAST_CHECKS! gtr 0 (
+    echo   - FFmpeg Streams     : 시작 중...
 ) else (
     echo   - FFmpeg Streams     : 오류: 작동 중지 ^^!^^!^^!
 )
@@ -118,6 +126,8 @@ for /f %%c in ('tasklist /fi "imagename eq cctvgo-service.exe" /nh ^| find /c "c
 :: 개수에 따라 출력 (if-else 구조 명확화)
 if !CS_COUNT! gtr 0 (
     echo   - CCTVGO Service     : 정상 작동 중 ^(!CS_COUNT!개^)
+) else if !FAST_CHECKS! gtr 0 (
+    echo   - CCTVGO Service     : 시작 중...
 ) else (
     echo   - CCTVGO Service     : 오류: 작동 중지 ^^!^^!^^!
 )
@@ -169,12 +179,21 @@ echo   - 네트웍 수신  : !NET_RECV! Mbps
 echo -----------------------------------------------------
 echo.
 echo -----------------------------------------------------
-echo 마지막 업데이트: [%date% %time%] (30초마다 자동 갱신)
+if !FAST_CHECKS! gtr 0 (
+    echo 마지막 업데이트: [%date% %time%] ^(시작 확인 중, 5초마다 갱신^)
+) else (
+    echo 마지막 업데이트: [%date% %time%] ^(60초마다 자동 갱신^)
+)
 echo.
 echo ※ 프로그램을 종료하시려면 우측 상단 [X] 버튼을 눌러주세요.
 echo -----------------------------------------------------
 
-:: 60초 동안 대기 (화면을 갱신하기 위한 시간 벌기)
-timeout /t 60 /nobreak > nul
+:: 시작 직후에는 5초, 그 뒤로는 60초 동안 대기 (화면을 갱신하기 위한 시간 벌기)
+if !FAST_CHECKS! gtr 0 (
+    set /a FAST_CHECKS-=1
+    timeout /t 5 /nobreak > nul
+) else (
+    timeout /t 60 /nobreak > nul
+)
 
 goto monitor_loop

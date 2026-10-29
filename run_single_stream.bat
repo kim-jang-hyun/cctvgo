@@ -16,7 +16,8 @@ set OUTPUT_FILE=!OUTPUT_DIR!\!STREAM_FILE!
 :: package 폴더의 cctvgo-ffmpeg.exe 경로 설정
 set "FFMPEG_EXE=%~dp0ffmpeg\bin\cctvgo-ffmpeg.exe"
 
-echo RTSP_URL: !RTSP_URL!
+:: 주소에는 카메라 비밀번호가 들어 있어 로그에 남기지 않는다
+echo RTSP_URL: (보안을 위해 표시하지 않음)
 echo OUTPUT_DIR: !OUTPUT_DIR!
 echo STREAM_FILE: !STREAM_FILE!
 echo RETRY_DELAY: !RETRY_DELAY!

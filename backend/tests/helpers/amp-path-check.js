@@ -1,5 +1,5 @@
 'use strict';
-// & 가 들어간 RTSP 주소가 start_ffmpeg.bat -> run_single_stream.bat -> ffmpeg 까지 온전히 전달되는지 확인한다.
+// & 가 들어간 RTSP 주소가 StreamManager(spawnStream) -> run_single_stream.bat -> ffmpeg 까지 온전히 전달되는지 확인한다.
 // 사용: node tests/helpers/amp-path-check.js [대기 ms, 기본 15000]
 // 가짜 카메라(127.0.0.1:5540)가 받은 요청 경로를 보고 판정하고, 종료 코드 0=PASS, 1=FAIL.
 const { createMockRtsp } = require('./mock-rtsp');

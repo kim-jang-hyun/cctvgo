@@ -64,14 +64,7 @@ echo [ERROR] ffmpeg folder not found. Aborting script.
 exit /b 1
 )
 
-:: 7. ffmpeg 스크립트 복사
-if exist "%ROOT_DIR%\start_ffmpeg.bat" (
-copy "%ROOT_DIR%\start_ffmpeg.bat" "%PACKAGE_DIR%" /Y
-echo [INFO] Copied start_ffmpeg.bat
-) else (
-echo [ERROR] start_ffmpeg.bat not found. Aborting script.
-exit /b 1
-)
+:: 7. ffmpeg 스크립트 복사 (영상은 cctvgo-service.exe 가 카메라마다 run_single_stream.bat 으로 켠다)
 if exist "%ROOT_DIR%\run_single_stream.bat" (
 copy "%ROOT_DIR%\run_single_stream.bat" "%PACKAGE_DIR%" /Y
 echo [INFO] Copied run_single_stream.bat

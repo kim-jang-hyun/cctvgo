@@ -50,7 +50,7 @@ function killTree(pid) {
     });
 }
 
-/** start_ffmpeg.bat 과 같은 방식으로 영상 하나를 켠다. 주소는 & 등이 깨지지 않도록 환경 변수 STREAM_URL 로 넘긴다 */
+/** 카메라 영상 하나를 켠다 (예전 start_ffmpeg.bat 과 같은 방식). 주소는 & 등이 깨지지 않도록 환경 변수 STREAM_URL 로 넘긴다 */
 function spawnStream({ scriptDir, k, url }) {
     fs.mkdirSync(path.join(scriptDir, 'hls', `stream${k}`), { recursive: true });
     fs.mkdirSync(path.join(scriptDir, 'logs'), { recursive: true });
