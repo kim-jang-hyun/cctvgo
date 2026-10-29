@@ -1,8 +1,8 @@
 'use strict';
-const fs = require('fs');
 const path = require('path');
 const { isPrivateIPv4, AuthBudget, createRateLimiter, createLock } = require('./guard');
-const { parseCameras, saveCameraLine } = require('./cctv-file');
+const { parseRtspUrl } = require('./cctv-file');
+const { registerCameraRoutes } = require('./camera-routes');
 const { loadSettings } = require('./paths');
 const { scanNetwork } = require('./scan');
 const { findStream } = require('./find-stream');
@@ -12,7 +12,7 @@ const { findStream } = require('./find-stream');
  * 이 파일에서 요청 본문(비밀번호 포함)을 로그로 남기지 않는다.
  */
 
-function registerFinderRoutes(app, { authMiddleware, baseDir, cctvPath, deps = {}, budget = new AuthBudget({ persistPath: path.join(baseDir, 'finder-budget.json') }) }) {
+function registerFinderRoutes(app, { authMiddleware, baseDir, cctvPath, streams, deps = {}, budget = new AuthBudget({ persistPath: path.join(baseDir, 'finder-budget.json') }) }) {
     const doScan = deps.scanNetwork || scanNetwork;
     const doFind = deps.findStream || findStream;
 
@@ -20,7 +20,7 @@ function registerFinderRoutes(app, { authMiddleware, baseDir, cctvPath, deps = {
     const scanLimiter = createRateLimiter({ max: 6, windowMs: 60 * 1000 });
     const probeLimiter = createRateLimiter({ max: 20, windowMs: 60 * 1000 });
     const probingIps = new Set(); // 같은 카메라를 동시에 두 번 탐색하면 인증 실패 예산을 넘길 수 있어 IP별로 하나만 허용
-    const saveLimiter = createRateLimiter({ max: 20, windowMs: 60 * 1000 });
+    const settings = () => (deps.loadSettings ? deps.loadSettings() : loadSettings(baseDir));
 
     const keyOf = req => req.sessionID || req.ip || 'anonymous';
     const bad = (res, message) => res.status(400).json({ status: 'error', message });
@@ -44,7 +44,19 @@ function registerFinderRoutes(app, { authMiddleware, baseDir, cctvPath, deps = {
 
     app.post('/api/finder/probe', authMiddleware, async (req, res) => {
         if (!probeLimiter.allow(keyOf(req))) return tooMany(res);
-        const { ip, port, username, password, path, vendorHint } = req.body || {};
+        const body = req.body || {};
+        let { ip, port, username, password, path } = body;
+        const { vendorHint } = body;
+        // RTSP 주소 직접 입력: 주소를 나눠 쓰고, 따로 입력한 아이디/비밀번호가 있으면 그 값이 우선한다
+        if (body.rtspUrl !== undefined) {
+            const parts = typeof body.rtspUrl === 'string' && body.rtspUrl.length <= 500 ? parseRtspUrl(body.rtspUrl) : null;
+            if (!parts) return bad(res, 'RTSP 주소 형식이 올바르지 않습니다.');
+            ip = parts.host;
+            port = parts.port;
+            path = parts.path;
+            if (!username) username = parts.username;
+            if (!password) password = parts.password;
+        }
 
         if (!isPrivateIPv4(ip)) return bad(res, '사설 IP 주소(예: 192.168.0.10)만 입력할 수 있습니다.');
         let portNumber;
@@ -76,7 +88,7 @@ function registerFinderRoutes(app, { authMiddleware, baseDir, cctvPath, deps = {
                 password: password || '',
                 vendorHint: vendorHint || '',
                 budget,
-                settings: deps.loadSettings ? deps.loadSettings() : loadSettings(baseDir),
+                settings: settings(),
             });
             res.json(result);
         } catch (error) {
@@ -87,47 +99,8 @@ function registerFinderRoutes(app, { authMiddleware, baseDir, cctvPath, deps = {
         }
     });
 
-    app.get('/api/finder/cameras', authMiddleware, (req, res) => {
-        try {
-            const text = fs.existsSync(cctvPath) ? fs.readFileSync(cctvPath, 'utf8') : '';
-            const cameras = parseCameras(text).map(c => {
-                let host = '';
-                try { host = new URL(c.url).hostname; } catch (e) { /* 주소 형식 오류는 빈 값 */ }
-                return { index: c.index, name: c.name, host };
-            });
-            res.json({ status: 'success', cameras });
-        } catch (error) {
-            console.error('Finder cameras failed:', error.message);
-            res.status(500).json({ status: 'error', message: 'cctv.txt 를 읽을 수 없습니다.' });
-        }
-    });
-
-    app.post('/api/finder/save', authMiddleware, (req, res) => {
-        if (!saveLimiter.allow(keyOf(req))) return tooMany(res);
-        const { url, name, mode = 'append', replaceIndex } = req.body || {};
-
-        if (typeof url !== 'string' || url.length > 500) return bad(res, '카메라 주소가 올바르지 않습니다.');
-        if (/[\s,]/.test(url)) return bad(res, '카메라 주소에 공백이나 쉼표(,)를 넣을 수 없습니다.');
-        if (/["^<>|\x00-\x1f\x7f]/.test(url)) return bad(res, '카메라 주소에 사용할 수 없는 문자가 있습니다.');
-        // rtsp:// 뒤 첫 / 전까지(authority)에 @ 가 둘 이상이면 파서마다 호스트를 다르게 해석할 수 있어 거부한다
-        const authority = url.replace(/^rtsp:\/\//i, '').split('/')[0];
-        if (authority.split('@').length > 2) return bad(res, '카메라 주소 형식이 올바르지 않습니다.');
-        let parsed;
-        try { parsed = new URL(url); } catch (e) { return bad(res, '카메라 주소가 올바르지 않습니다.'); }
-        if (parsed.protocol !== 'rtsp:' || !isPrivateIPv4(parsed.hostname)) return bad(res, 'rtsp:// 로 시작하는 사설 IP 주소만 저장할 수 있습니다.');
-        if (mode !== 'append' && mode !== 'replace') return bad(res, '저장 방식이 올바르지 않습니다.');
-        if (mode === 'replace' && !Number.isInteger(replaceIndex)) return bad(res, '교체할 카메라를 선택하세요.');
-
-        try {
-            const result = saveCameraLine(cctvPath, { url, name: typeof name === 'string' ? name : '', mode, replaceIndex });
-            console.log(`[FINDER] cctv.txt 저장 완료 (mode=${mode}, index=${result.index})`);
-            res.json({ status: 'success', restartRequired: true, index: result.index, backup: result.backup });
-        } catch (error) {
-            if (/교체할 카메라/.test(error.message)) return bad(res, error.message);
-            console.error('Finder save failed:', error.message);
-            res.status(500).json({ status: 'error', message: 'cctv.txt 저장에 실패했습니다.' });
-        }
-    });
+    // 카메라 관리 API 는 인증 실패 예산과 탐색 중 IP 목록을 probe 와 함께 쓴다 (같은 카메라 잠금 방지)
+    registerCameraRoutes(app, { authMiddleware, cctvPath, streams, shared: { budget, probingIps, probeLimiter, doFind, settings, keyOf } });
 }
 
 module.exports = { registerFinderRoutes };

@@ -7,7 +7,6 @@ const path = require('path');
 const express = require('express');
 const { registerFinderRoutes } = require('../finder/routes');
 const { AuthBudget } = require('../finder/guard');
-const { parseCameras } = require('../finder/cctv-file');
 
 async function startApp(deps = {}, cctvText = '# c\r\nrtsp://admin:secret@192.168.0.5:554/x, 거실') {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cctvgo-routes-'));
@@ -31,7 +30,7 @@ async function startApp(deps = {}, cctvText = '# c\r\nrtsp://admin:secret@192.16
 test('로그인하지 않으면 모든 finder API가 authMiddleware 에 막힌다', async () => {
     const app = await startApp();
     try {
-        for (const [m, u] of [['POST', '/api/finder/scan'], ['POST', '/api/finder/probe'], ['GET', '/api/finder/cameras'], ['POST', '/api/finder/save']]) {
+        for (const [m, u] of [['POST', '/api/finder/scan'], ['POST', '/api/finder/probe']]) {
             const res = await app.call(m, u, m === 'POST' ? {} : undefined, false);
             assert.equal(res.status, 302, `${m} ${u}`);
         }
@@ -123,61 +122,6 @@ test('scan: 결과를 돌려주고 동시에 하나만 실행한다', async () =
     } finally { await app.close(); }
 });
 
-test('cameras: 이름과 호스트만 돌려주고 비밀번호는 노출하지 않는다', async () => {
-    const app = await startApp();
-    try {
-        const res = await app.call('GET', '/api/finder/cameras');
-        const text = await res.text();
-        assert.ok(!text.includes('secret'));
-        assert.deepEqual(JSON.parse(text).cameras, [{ index: 0, name: '거실', host: '192.168.0.5' }]);
-    } finally { await app.close(); }
-});
-
-test('save: append 는 cctv.txt 에 추가하고 restartRequired 를 알린다', async () => {
-    const app = await startApp();
-    try {
-        const res = await app.call('POST', '/api/finder/save', { url: 'rtsp://admin:pw%241@192.168.0.9:554/live', name: '주방', mode: 'append' });
-        assert.equal(res.status, 200);
-        const body = await res.json();
-        assert.equal(body.restartRequired, true);
-        assert.equal(body.index, 1);
-        const cams = parseCameras(fs.readFileSync(app.cctvPath, 'utf8'));
-        assert.deepEqual(cams[1], { index: 1, url: 'rtsp://admin:pw%241@192.168.0.9:554/live', name: '주방' });
-        assert.ok(fs.existsSync(app.cctvPath + '.bak'));
-    } finally { await app.close(); }
-});
-
-test('save: replace 는 지정한 카메라를 교체한다', async () => {
-    const app = await startApp();
-    try {
-        const res = await app.call('POST', '/api/finder/save', { url: 'rtsp://a:b@192.168.0.9:554/z', name: '새 거실', mode: 'replace', replaceIndex: 0 });
-        assert.equal(res.status, 200);
-        const cams = parseCameras(fs.readFileSync(app.cctvPath, 'utf8'));
-        assert.equal(cams.length, 1);
-        assert.equal(cams[0].name, '새 거실');
-    } finally { await app.close(); }
-});
-
-test('save: 공인 IP, rtsp 아님, 쉼표/공백 포함, 잘못된 mode/replaceIndex 는 400 이고 파일은 그대로', async () => {
-    const app = await startApp();
-    const before = fs.readFileSync(app.cctvPath, 'utf8');
-    try {
-        for (const body of [
-            { url: 'rtsp://a:b@8.8.8.8:554/x', name: 'n' },
-            { url: 'http://192.168.0.9/x', name: 'n' },
-            { url: 'rtsp://a:b@192.168.0.9:554/x,evil', name: 'n' },
-            { url: 'rtsp://a:b@192.168.0.9:554/x y', name: 'n' },
-            { url: 'not a url', name: 'n' },
-            { url: 'rtsp://a:b@192.168.0.9:554/x', name: 'n', mode: 'delete' },
-            { url: 'rtsp://a:b@192.168.0.9:554/x', name: 'n', mode: 'replace', replaceIndex: 9 },
-        ]) {
-            const res = await app.call('POST', '/api/finder/save', body);
-            assert.equal(res.status, 400, JSON.stringify(body));
-        }
-        assert.equal(fs.readFileSync(app.cctvPath, 'utf8'), before);
-    } finally { await app.close(); }
-});
-
 test('probe: 아이디에 제어문자/따옴표가 있으면 400 이고 findStream 을 부르지 않는다', async () => {
     let called = 0;
     const app = await startApp({ findStream: async () => { called++; return { status: 'found' }; } });
@@ -187,33 +131,6 @@ test('probe: 아이디에 제어문자/따옴표가 있으면 400 이고 findStr
             assert.equal(res.status, 400, JSON.stringify(username));
         }
         assert.equal(called, 0);
-    } finally { await app.close(); }
-});
-
-test('save: 금지 문자(" ^ < > | 제어문자)와 authority 의 @ 2개 이상은 400 이고 파일은 그대로, & 는 허용', async () => {
-    const app = await startApp();
-    const before = fs.readFileSync(app.cctvPath, 'utf8');
-    try {
-        for (const url of [
-            'rtsp://a:b@192.168.0.9:554/x"y',
-            'rtsp://a:b@192.168.0.9:554/x^y',
-            'rtsp://a:b@192.168.0.9:554/x<y',
-            'rtsp://a:b@192.168.0.9:554/x>y',
-            'rtsp://a:b@192.168.0.9:554/x|y',
-            'rtsp://a:b@192.168.0.9:554/x\x01y',
-            'rtsp://a:b@192.168.0.9:554/x\x7fy',
-            'rtsp://x@8.8.8.8:1@192.168.0.5/live',
-            'rtsp://a:b@c@192.168.0.5:554/live',
-        ]) {
-            const res = await app.call('POST', '/api/finder/save', { url, name: 'n' });
-            assert.equal(res.status, 400, JSON.stringify(url));
-        }
-        assert.equal(fs.readFileSync(app.cctvPath, 'utf8'), before);
-        const ok = await app.call('POST', '/api/finder/save', { url: 'rtsp://a:b@192.168.0.9:554/cam/realmonitor?channel=1&subtype=0', name: 'n' });
-        assert.equal(ok.status, 200);
-        // 경로 쪽 @ 는 authority 가 아니므로 허용
-        const ok2 = await app.call('POST', '/api/finder/save', { url: 'rtsp://a:b@192.168.0.9:554/x@y', name: 'n2' });
-        assert.equal(ok2.status, 200);
     } finally { await app.close(); }
 });
 
