@@ -1,4 +1,5 @@
 'use strict';
+const crypto = require('crypto');
 const fs = require('fs');
 
 /**
@@ -32,49 +33,103 @@ function sanitizeName(name, fallback) {
     return clean || fallback;
 }
 
+function lineHash(raw) {
+    return crypto.createHash('sha256').update(raw.trim(), 'utf8').digest('hex').slice(0, 16);
+}
+
+/** 서버/영상 시작/목록 API 가 모두 이 해석을 쓴다 (줄 순서가 영상 번호와 맞아야 하므로 해석 규칙은 여기 하나뿐) */
 function parseCameras(text) {
     return text
+        .replace(/^﻿/, '')
         .split(/\r?\n/)
         .filter(isCameraLine)
         .map((line, index) => {
             const i = line.indexOf(',');
             const url = (i >= 0 ? line.slice(0, i) : line).trim();
             const name = i >= 0 ? line.slice(i + 1).trim() : '';
-            return { index, url, name };
+            return { index, url, name, raw: line.trim(), hash: lineHash(line) };
         });
 }
 
-/** text에 카메라 줄을 추가/교체한 새 text를 반환한다 (파일 접근 없음) */
-function applyCameraLine(text, { url, name, mode = 'append', replaceIndex }) {
+function safeDecode(value) {
+    try { return decodeURIComponent(value); } catch (e) { return value; }
+}
+
+/** rtsp://[아이디[:비밀번호]@]호스트[:포트][/경로[?쿼리]] 를 나눈다. 아이디/비밀번호는 인코딩을 풀어서 돌려준다 */
+function parseRtspUrl(url) {
+    const m = /^rtsp:\/\/([^/?]*)(.*)$/i.exec(String(url || '').trim());
+    if (!m) return null;
+    const authority = m[1];
+    const at = authority.lastIndexOf('@');
+    const userinfo = at >= 0 ? authority.slice(0, at) : '';
+    const hostport = at >= 0 ? authority.slice(at + 1) : authority;
+    const hp = /^([^:]+)(?::(\d{1,5}))?$/.exec(hostport);
+    if (!hp) return null;
+    const colon = userinfo.indexOf(':');
+    const username = colon >= 0 ? userinfo.slice(0, colon) : userinfo;
+    const password = colon >= 0 ? userinfo.slice(colon + 1) : '';
+    const rest = m[2] || '';
+    return {
+        host: hp[1],
+        port: hp[2] ? Number(hp[2]) : 554,
+        path: rest.startsWith('/') ? rest : '/' + rest,
+        username: safeDecode(username),
+        password: safeDecode(password),
+    };
+}
+
+/** 같은 카메라 영상인지 (호스트/포트/경로 비교, 계정은 무시) */
+function sameStream(a, b) {
+    const x = parseRtspUrl(a);
+    const y = parseRtspUrl(b);
+    return !!x && !!y && x.host === y.host && x.port === y.port && x.path === y.path;
+}
+
+function editError(code, message) {
+    return Object.assign(new Error(message), { code });
+}
+
+/**
+ * text 에 추가/수정/삭제를 적용한 새 text 를 반환한다 (파일 접근 없음)
+ * op: { type: 'append', url, name } | { type: 'update', index, hash, url?, name? } | { type: 'remove', index, hash }
+ * 수정/삭제는 순번과 줄 해시가 모두 맞아야 한다 (다른 창에서 목록이 바뀌었으면 CONFLICT)
+ */
+function applyEdit(text, op) {
     const eol = detectEol(text);
     const cameras = parseCameras(text);
 
-    if (mode === 'replace') {
-        if (!Number.isInteger(replaceIndex) || replaceIndex < 0 || replaceIndex >= cameras.length) {
-            throw new Error('교체할 카메라를 찾을 수 없습니다.');
-        }
-        const newLine = `${url}, ${sanitizeName(name, `카메라 ${replaceIndex + 1}`)}`;
-        const lines = text.split(/\r?\n/);
-        let seen = -1;
-        for (let i = 0; i < lines.length; i++) {
-            if (isCameraLine(lines[i]) && ++seen === replaceIndex) {
-                lines[i] = newLine;
-                break;
-            }
-        }
-        return { text: lines.join(eol), index: replaceIndex };
+    if (op.type === 'append') {
+        if (cameras.some(c => sameStream(c.url, op.url))) throw editError('DUPLICATE', '이미 등록된 카메라입니다.');
+        const newLine = `${op.url}, ${sanitizeName(op.name, `카메라 ${cameras.length + 1}`)}`;
+        const sep = text.length === 0 || /\n$/.test(text) ? '' : eol;
+        return { text: text + sep + newLine + eol, index: cameras.length };
     }
 
-    const newLine = `${url}, ${sanitizeName(name, `카메라 ${cameras.length + 1}`)}`;
-    const sep = text.length === 0 || /\n$/.test(text) ? '' : eol;
-    return { text: text + sep + newLine + eol, index: cameras.length };
+    const target = Number.isInteger(op.index) ? cameras[op.index] : undefined;
+    if (!target || target.hash !== op.hash) throw editError('CONFLICT', '목록이 바뀌었습니다. 화면을 다시 열어 주세요.');
+
+    const lines = text.split(/\r?\n/);
+    let seen = -1;
+    for (let i = 0; i < lines.length; i++) {
+        if (isCameraLine(lines[i]) && ++seen === op.index) {
+            if (op.type === 'remove') {
+                lines.splice(i, 1);
+            } else {
+                const url = op.url || target.url;
+                const name = op.name !== undefined ? op.name : target.name;
+                lines[i] = `${url}, ${sanitizeName(name, `카메라 ${op.index + 1}`)}`;
+            }
+            break;
+        }
+    }
+    return { text: lines.join(eol), index: op.index };
 }
 
 /** 백업(.bak) 후 임시 파일에 쓰고 rename 한다. 실패하면 원본은 그대로 남는다. */
-function saveCameraLine(filePath, opts) {
+function saveCameras(filePath, op) {
     const exists = fs.existsSync(filePath);
     const text = exists ? fs.readFileSync(filePath, 'utf8') : '';
-    const result = applyCameraLine(text, opts);
+    const result = applyEdit(text, op);
 
     let backup = null;
     if (exists) {
@@ -87,4 +142,4 @@ function saveCameraLine(filePath, opts) {
     return { index: result.index, backup };
 }
 
-module.exports = { encodeCred, buildRtspUrl, parseCameras, applyCameraLine, saveCameraLine };
+module.exports = { encodeCred, buildRtspUrl, parseCameras, parseRtspUrl, sameStream, applyEdit, saveCameras };
