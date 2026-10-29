@@ -7,10 +7,10 @@
 
     <!-- 기능마다 별도 화면으로 들어가는 메뉴 -->
     <nav class="menu">
-      <router-link to="/finder" class="menu-item">
+      <router-link to="/cameras" class="menu-item">
         <span class="menu-text">
-          <strong>카메라 주소 찾기</strong>
-          <span class="menu-desc">카메라의 RTSP 주소를 찾아 cctv.txt에 저장합니다</span>
+          <strong>카메라 관리</strong>
+          <span class="menu-desc">카메라를 추가하거나 수정·삭제합니다</span>
         </span>
         <span class="chevron" aria-hidden="true">›</span>
       </router-link>
