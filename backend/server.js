@@ -79,45 +79,12 @@ const CONFIG_PATH = path.join(BASE_DIR, 'config.json');
 const passwordStore = createPasswordStore(CONFIG_PATH);
 const CCTV_CONFIG_PATH = path.join(BASE_DIR, 'cctv.txt');
 
-/**
- * cctv.txt 파일에서 카메라 주소와 이름 목록을 읽어와 파싱하는 함수
- * @returns {object} { success: boolean, data: Array<string>, error?: string }
- */
-function readCCTVConfig() {
-    try {
-        if (!fs.existsSync(CCTV_CONFIG_PATH)) {
-            return { success: false, error: 'cctv.txt file not found.' };
-        }
-
-        const fileContent = fs.readFileSync(CCTV_CONFIG_PATH, 'utf8');
-        const lines = fileContent.split('\n');
-        const channelList = [];
-
-        for (const line of lines) {
-            const trimmedLine = line.trim();
-
-            // 1. 주석 무시 (#으로 시작)
-            if (trimmedLine.startsWith('#') || trimmedLine === '') {
-                continue;
-            }
-
-            // 2. 콤마로 분리하여 이름 추출 (주소, 이름)
-            const parts = trimmedLine.split(',');
-            if (parts.length >= 2) {
-                // 두 번째 요소(카메라 이름)를 트림하여 리스트에 추가
-                const channelName = parts[1].trim();
-                if (channelName) {
-                    channelList.push(channelName);
-                }
-            }
-        }
-
-        return { success: true, data: channelList };
-    } catch (error) {
-        console.error('Error reading CCTV config file:', error.message);
-        return { success: false, error: 'Failed to read and parse cctv.txt.', details: error.message };
-    }
-}
+// 카메라 영상(run_single_stream.bat → cctvgo-ffmpeg)은 서비스가 켜고 끈다.
+// 배치 파일과 hls 폴더는 PKG 환경에서는 실행 파일 옆, 개발 환경에서는 저장소 루트에 있다
+const STREAM_SCRIPT_DIR = path.dirname(HLS_STATIC_PATH);
+const { StreamManager } = require('./streams/stream-manager');
+const { parseCameras } = require('./finder/cctv-file');
+const streams = new StreamManager({ scriptDir: STREAM_SCRIPT_DIR });
 
 // 로그인 처리 API
 app.post('/login', (req, res) => {
@@ -134,33 +101,9 @@ app.post('/login', (req, res) => {
   }
 });
 
-/**
- * 💡 cctv.txt 파일에서 카메라(채널) 이름 목록을 응답하는 API 엔드포인트
- * GET /api/get-channel-list
- */
-app.get('/api/get-channel-list', authMiddleware, (req, res) => {
-    const result = readCCTVConfig();
-
-    if (result.success) {
-        // 성공적으로 리스트를 읽었을 경우
-        res.json({
-            status: 'success',
-            channelList: result.data,
-            message: `Successfully read ${result.data.length} channels.`
-        });
-    } else {
-        // 에러가 발생했을 경우
-        res.status(500).json({
-            status: 'error',
-            message: result.error,
-            details: result.details
-        });
-    }
-});
-
-// 카메라 주소 찾기 (RTSP Finder) API
+// 카메라 주소 찾기 + 카메라 관리 API (영상 화면용 /api/get-channel-list 포함)
 const { registerFinderRoutes } = require('./finder/routes');
-registerFinderRoutes(app, { authMiddleware, baseDir: BASE_DIR, cctvPath: CCTV_CONFIG_PATH });
+registerFinderRoutes(app, { authMiddleware, baseDir: BASE_DIR, cctvPath: CCTV_CONFIG_PATH, streams });
 
 // 설정 화면 API (비밀번호 변경)
 const { registerSettingsRoutes } = require('./settings/routes');
@@ -203,6 +146,13 @@ app.get('*', authMiddleware, (req, res) => {
   res.sendFile(path.join(FRONTEND_DIST_STATIC_PATH, 'index.html'));
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Server is running at http://localhost:${PORT}`);
+  // cctv.txt 순서대로 카메라 영상을 켠다 (실패해도 웹 화면은 계속 동작)
+  try {
+    const text = fs.existsSync(CCTV_CONFIG_PATH) ? fs.readFileSync(CCTV_CONFIG_PATH, 'utf8') : '';
+    await streams.startAll(parseCameras(text).map(c => c.url));
+  } catch (error) {
+    console.error('Stream start failed:', error.message);
+  }
 });

@@ -131,8 +131,8 @@ const getCameraList = async () => {
     if (data.status !== 'success') {
       throw new Error(data.message || 'API responded with non-success status.');
     }
-    console.log('채널 리스트:', data.channelList);
-    channelList = data.channelList || [];
+    console.log('채널 리스트:', data.channels);
+    channelList = data.channels || [];
   } catch (err) {
     console.error('API call error:', err.message);
     error.value = err.message;
@@ -141,13 +141,14 @@ const getCameraList = async () => {
   return channelList;
 };
 
-const initCameraList = (cameraNameList) => {
+// channels: [{ name, url }] — 영상 주소는 서버가 정한다 (카메라를 지워도 다른 카메라의 영상 번호는 그대로라 순번으로 계산하면 안 된다)
+const initCameraList = (channels) => {
   if (error.value !== null) {
     console.error('initCameraList error: ', error.value);
     cameraList.value = [];
     return;
   }
-  const cameraCount = cameraNameList.length;
+  const cameraCount = channels.length;
   const columns = Math.max(MIN_COLUMNS, Math.ceil(cameraCount / ROWS));
   const totalSlots = ROWS * columns;
 
@@ -156,8 +157,8 @@ const initCameraList = (cameraNameList) => {
     const hasCamera = i < cameraCount;
     cameraList.value.push({
       id: 'cam' + (i + 1),
-      name: hasCamera ? cameraNameList[i] : null,
-      url: hasCamera ? `/hls/stream${i + 1}/stream${i + 1}.m3u8` : null,
+      name: hasCamera ? channels[i].name : null,
+      url: hasCamera ? channels[i].url : null,
     });
   }
   console.log(`cameraList가 ${cameraCount}개(그리드 ${columns}x${ROWS}=${totalSlots}칸)로 초기화되었습니다.`, cameraList.value);
@@ -235,8 +236,8 @@ onMounted(async () => {
   mobileQuery.addEventListener('change', checkMobile);
   window.addEventListener('resize', checkMobile);
 
-  const cameraNameList = await getCameraList();
-  initCameraList(cameraNameList);
+  const channels = await getCameraList();
+  initCameraList(channels);
 
   await nextTick();
   initPlayers();
