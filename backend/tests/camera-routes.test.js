@@ -20,9 +20,9 @@ function fakeStreams() {
         fail: false,
         gate: null,
         async add(url) { calls.push(['add', url]); if (this.gate) await this.gate; if (this.fail) throw new Error('x'); return 9; },
-        async restart(index, url) { calls.push(['restart', index, url]); if (this.fail) throw new Error('x'); },
-        async remove(index) { calls.push(['remove', index]); if (this.fail) throw new Error('x'); },
-        streamUrl(index) { return `/hls/stream${index + 7}/stream${index + 7}.m3u8`; },
+        async restart(oldUrl, url) { calls.push(['restart', oldUrl, url]); if (this.fail) throw new Error('x'); },
+        async remove(url) { calls.push(['remove', url]); if (this.fail) throw new Error('x'); },
+        streamUrls(urls) { return urls.map((u, i) => `/hls/stream${i + 7}/stream${i + 7}.m3u8`); },
     };
 }
 
@@ -76,7 +76,7 @@ test('옛 /api/finder/cameras, /api/finder/save 는 없다', async () => {
     } finally { await app.close(); }
 });
 
-test('get-channel-list: 이름 없는 줄은 카메라 N, url 은 streams.streamUrl 값', async () => {
+test('get-channel-list: 이름 없는 줄은 카메라 N, url 은 streams.streamUrls 값', async () => {
     const app = await startApp({ cctvText: 'rtsp://a:b@192.168.0.5:554/x, 거실\r\nrtsp://a:b@192.168.0.6:554/y' });
     try {
         const body = await (await app.call('GET', '/api/get-channel-list')).json();
@@ -221,7 +221,7 @@ test('edit: 기존 경로로 1번 시도하고 path_not_found 일 때만 전체 
     } finally { await app2.close(); }
 });
 
-test('edit: 성공하면 같은 순번 줄만 바뀌고 streams.restart(index, 새 url)', async () => {
+test('edit: 성공하면 같은 순번 줄만 바뀌고 streams.restart(옛 url, 새 url)', async () => {
     const app = await startApp({ deps: { findStream: async () => found('rtsp://admin:new@192.168.0.5:554/x') } });
     try {
         const before = app.cams();
@@ -231,7 +231,7 @@ test('edit: 성공하면 같은 순번 줄만 바뀌고 streams.restart(index, �
         assert.equal(after[0].url, 'rtsp://admin:new@192.168.0.5:554/x');
         assert.equal(after[0].name, '새 거실');
         assert.equal(after[1].raw, before[1].raw);
-        assert.deepEqual(app.streams.calls, [['restart', 0, 'rtsp://admin:new@192.168.0.5:554/x']]);
+        assert.deepEqual(app.streams.calls, [['restart', 'rtsp://admin:secret@192.168.0.5:554/x', 'rtsp://admin:new@192.168.0.5:554/x']]);
     } finally { await app.close(); }
 });
 
@@ -276,7 +276,7 @@ test('edit: 후보가 여러 개면 choose 를 주고 confirm 으로 저장한�
         assert.deepEqual(await ok.json(), { status: 'saved', applied: true });
         assert.equal(app.cams()[0].url, 'rtsp://admin:newpw@192.168.0.5:554/main');
         assert.equal(app.cams()[0].name, '거실2');
-        assert.deepEqual(app.streams.calls, [['restart', 0, 'rtsp://admin:newpw@192.168.0.5:554/main']]);
+        assert.deepEqual(app.streams.calls, [['restart', 'rtsp://admin:secret@192.168.0.5:554/x', 'rtsp://admin:newpw@192.168.0.5:554/main']]);
 
         // 한 번 쓰면 다시 쓸 수 없다
         assert.equal((await app.call('POST', '/api/cameras/0/edit/confirm', { hash: app.cams()[0].hash, choice: 0 })).status, 409);
@@ -302,7 +302,7 @@ test('edit/delete: hash 가 다르면 409 이고 파일과 streams 는 그대로
     } finally { await app.close(); }
 });
 
-test('delete: 그 줄만 지우고 streams.remove(index)', async () => {
+test('delete: 그 줄만 지우고 streams.remove(그 카메라 url)', async () => {
     const app = await startApp();
     try {
         const cams = app.cams();
@@ -310,7 +310,7 @@ test('delete: 그 줄만 지우고 streams.remove(index)', async () => {
         assert.deepEqual(await res.json(), { status: 'success', applied: true });
         assert.deepEqual(app.cams().map(c => c.raw), [cams[1].raw]);
         assert.ok(app.read().startsWith('# c'));
-        assert.deepEqual(app.streams.calls, [['remove', 0]]);
+        assert.deepEqual(app.streams.calls, [['remove', 'rtsp://admin:secret@192.168.0.5:554/x']]);
     } finally { await app.close(); }
 });
 

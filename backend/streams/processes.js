@@ -30,7 +30,8 @@ function matchesStream(commandLine, k, scriptDir) {
 function listProcesses() {
     const script = "Get-CimInstance Win32_Process -Filter \"Name='cmd.exe' or Name='cctvgo-ffmpeg.exe'\" | Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress";
     return new Promise((resolve, reject) => {
-        execFile('powershell', ['-NoProfile', '-Command', script], { windowsHide: true, maxBuffer: 16 * 1024 * 1024 }, (error, stdout) => {
+        // PowerShell 이 멈추면 카메라 변경 작업이 계속 기다리게 되므로 시간 제한을 둔다
+        execFile('powershell', ['-NoProfile', '-Command', script], { windowsHide: true, maxBuffer: 16 * 1024 * 1024, timeout: 15000 }, (error, stdout) => {
             if (error) return reject(error);
             const text = stdout.trim();
             if (!text) return resolve([]);

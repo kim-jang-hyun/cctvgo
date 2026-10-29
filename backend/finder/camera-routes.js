@@ -74,7 +74,9 @@ function registerCameraRoutes(app, { authMiddleware, cctvPath, streams, shared }
 
     app.get('/api/get-channel-list', authMiddleware, (req, res) => {
         try {
-            const channels = readCameras().map(c => ({ name: c.name || `카메라 ${c.index + 1}`, url: streams.streamUrl(c.index) }));
+            const cameras = readCameras();
+            const urls = streams.streamUrls(cameras.map(c => c.url));
+            const channels = cameras.map((c, i) => ({ name: c.name || `카메라 ${c.index + 1}`, url: urls[i] }));
             res.json({ status: 'success', channels });
         } catch (error) {
             console.error('Channel list failed:', error.message);
@@ -115,8 +117,8 @@ function registerCameraRoutes(app, { authMiddleware, cctvPath, streams, shared }
         return { index, hash, target };
     }
 
-    async function saveNewUrl(req, res, { index, hash, name, url }) {
-        const done = await commit(req, res, { type: 'update', index, hash, url, name }, () => streams.restart(index, url));
+    async function saveNewUrl(req, res, { index, hash, name, oldUrl, url }) {
+        const done = await commit(req, res, { type: 'update', index, hash, url, name }, () => streams.restart(oldUrl, url));
         if (done) res.json({ status: 'saved', applied: done.applied });
     }
 
@@ -167,10 +169,10 @@ function registerCameraRoutes(app, { authMiddleware, cctvPath, streams, shared }
         const labels = (result.candidates || []).filter(c => urls.includes(c.url)).map(c => c.label);
         if (urls.length === 0) return bad(res, '찾은 주소가 이 카메라와 맞지 않습니다.');
         const newName = name ?? target.name;
-        if (urls.length === 1) return saveNewUrl(req, res, { index, hash, name: newName, url: urls[0] });
+        if (urls.length === 1) return saveNewUrl(req, res, { index, hash, name: newName, oldUrl: target.url, url: urls[0] });
 
         // 여러 스트림이 나오면 사용자가 고른다. 주소(비밀번호 포함)는 세션에만 두고 화면에는 가린 주소만 보낸다
-        req.session.pendingEdit = { index, hash, name: newName, urls };
+        req.session.pendingEdit = { index, hash, name: newName, oldUrl: target.url, urls };
         const preselect = Math.max(0, urls.findIndex(u => parseRtspUrl(u).path === parts.path && parseRtspUrl(u).port === parts.port));
         res.json({ status: 'choose', preselect, candidates: urls.map((u, i) => ({ label: labels[i] || `스트림 ${i + 1}`, maskedUrl: maskedUrl(u) })) });
     });
@@ -183,14 +185,14 @@ function registerCameraRoutes(app, { authMiddleware, cctvPath, streams, shared }
             return conflict(res, '목록이 바뀌었습니다. 화면을 다시 열어 주세요.');
         }
         delete req.session.pendingEdit;
-        return saveNewUrl(req, res, { index, hash, name: pending.name, url: pending.urls[choice] });
+        return saveNewUrl(req, res, { index, hash, name: pending.name, oldUrl: pending.oldUrl, url: pending.urls[choice] });
     });
 
     app.delete('/api/cameras/:index', authMiddleware, async (req, res) => {
         const found = findTarget(req, res);
         if (!found) return;
-        const { index, hash } = found;
-        const done = await commit(req, res, { type: 'remove', index, hash }, () => streams.remove(index));
+        const { index, hash, target } = found;
+        const done = await commit(req, res, { type: 'remove', index, hash }, () => streams.remove(target.url));
         if (done) res.json({ status: 'success', applied: done.applied });
     });
 }
