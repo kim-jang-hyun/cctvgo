@@ -1,28 +1,30 @@
 <template>
   <div class="finder">
     <header class="finder-head">
-      <router-link to="/settings" class="back">← 설정으로</router-link>
-      <h2>카메라 주소 찾기</h2>
+      <router-link to="/cameras" class="back">← 카메라 관리</router-link>
+      <h2>카메라 추가</h2>
     </header>
 
     <!-- 1. 카메라 선택 -->
     <section v-if="step === 'select'" class="card">
-      <p class="desc">같은 네트워크(공유기)에 연결된 카메라를 찾습니다. 카메라의 아이디/비밀번호는 직접 입력해야 합니다.</p>
-      <button class="primary" :disabled="scanning" @click="runScan">
-        {{ scanning ? '찾는 중... (최대 20초)' : '내 네트워크에서 카메라 찾기' }}
+      <p class="desc">같은 네트워크(공유기)에 연결된 카메라를 찾습니다. 추가할 카메라 옆의 [추가]를 누르세요.</p>
+      <button :disabled="scanning" @click="runScan">
+        {{ scanning ? '찾는 중... (최대 20초)' : '다시 찾기' }}
       </button>
       <p v-if="scanError" class="error">{{ scanError }}</p>
 
       <ul v-if="scanned" class="camera-list">
-        <li v-for="c in cameras" :key="c.ip">
-          <button class="list-item" @click="pickCamera(c)">
+        <li v-for="c in cameras" :key="c.ip" class="list-item">
+          <span class="grow">
             <strong>{{ c.ip }}</strong>
             <span v-if="c.vendor || c.model" class="tag">{{ [c.vendor, c.model].filter(Boolean).join(' ') }}</span>
             <span v-if="c.ports.length" class="muted">포트 {{ c.ports.join(', ') }}</span>
-          </button>
+          </span>
+          <span v-if="registeredHosts.has(c.ip)" class="done">등록됨</span>
+          <button v-else class="primary" @click="pickCamera(c)">추가</button>
         </li>
       </ul>
-      <p v-if="scanned && cameras.length === 0" class="muted">찾은 카메라가 없습니다. 아래에 IP 주소를 직접 입력하세요.</p>
+      <p v-if="scanned && cameras.length === 0" class="muted">찾은 카메라가 없습니다. 아래에 IP 주소나 RTSP 주소를 직접 입력하세요.</p>
 
       <div class="manual-ip">
         <label>IP 주소 직접 입력</label>
@@ -30,6 +32,19 @@
           <input v-model.trim="ip" placeholder="예: 192.168.0.10" inputmode="decimal" />
           <button :disabled="!ip" @click="goCredentials">다음</button>
         </div>
+      </div>
+
+      <div class="manual-ip">
+        <label>RTSP 주소 직접 입력</label>
+        <p class="muted">카메라나 녹화기(NVR) 설명서에 있는 RTSP 주소를 그대로 붙여 넣으세요. 비밀번호의 특수문자는 변환하지 않아도 됩니다.</p>
+        <input v-model.trim="rtspUrl" placeholder="rtsp://192.168.0.5:554/Streaming/Channels/201" autocomplete="off" />
+        <label>카메라 아이디</label>
+        <input v-model.trim="rtspUser" autocomplete="off" />
+        <label>카메라 비밀번호</label>
+        <input v-model="rtspPassword" type="password" autocomplete="off" />
+        <label>카메라 이름</label>
+        <input v-model.trim="rtspName" placeholder="예: 거실" maxlength="30" />
+        <button class="primary" :disabled="!rtspUrl" @click="runRtspProbe">접속 테스트 후 추가</button>
       </div>
     </section>
 
@@ -66,16 +81,10 @@
 
       <label>카메라 이름</label>
       <input v-model.trim="name" placeholder="예: 거실" maxlength="30" />
-
-      <label>저장 방식</label>
-      <select v-model="saveMode">
-        <option value="append">새 카메라로 추가</option>
-        <option v-for="c in existing" :key="c.index" :value="'replace:' + c.index">기존 "{{ c.name || c.host }}" 카메라 교체</option>
-      </select>
       <p v-if="saveError" class="error">{{ saveError }}</p>
       <div class="row">
         <button @click="reset">처음으로</button>
-        <button class="primary" :disabled="saving" @click="save">{{ saving ? '저장 중...' : 'cctv.txt에 저장' }}</button>
+        <button class="primary" :disabled="saving" @click="save(result.candidates[selected].url, name)">{{ saving ? '추가 중...' : '추가' }}</button>
       </div>
     </section>
 
@@ -83,9 +92,14 @@
     <section v-else-if="step === 'failed'" class="card">
       <p class="error">{{ failMessage }}</p>
       <div class="row wrap">
-        <button @click="step = 'credentials'">아이디/비밀번호 다시 입력</button>
-        <button @click="step = 'manual'">주소 직접 입력</button>
-        <button @click="reset">처음으로</button>
+        <template v-if="origin === 'rtsp'">
+          <button @click="step = 'select'">RTSP 주소 다시 입력</button>
+        </template>
+        <template v-else>
+          <button @click="step = 'credentials'">아이디/비밀번호 다시 입력</button>
+          <button @click="step = 'manual'">주소 직접 입력</button>
+          <button @click="reset">처음으로</button>
+        </template>
       </div>
       <div v-if="result && result.diagnostics" class="diag">
         <label>진단 정보 (문의 시 함께 보내 주세요. 비밀번호는 포함되지 않습니다)</label>
@@ -109,30 +123,37 @@
       </div>
     </section>
 
-    <!-- 7. 저장 완료 -->
+    <!-- 7. 추가 완료 -->
     <section v-else-if="step === 'saved'" class="card center">
-      <p class="ok">cctv.txt에 저장했습니다.</p>
-      <p class="notice">변경 내용을 적용하려면 <strong>cctvgo.bat 창을 닫고 다시 실행</strong>하세요.</p>
+      <template v-if="applied">
+        <p class="ok">카메라를 추가했습니다.</p>
+        <p class="muted">잠시 후 영상 화면에 나타납니다.</p>
+      </template>
+      <template v-else>
+        <p class="ok">카메라를 추가했습니다.</p>
+        <p class="notice">추가는 되었지만 {{ APPLY_FAILED }}</p>
+      </template>
       <div class="row">
-        <button @click="reset">카메라 더 찾기</button>
-        <router-link to="/" class="btn">영상 화면으로</router-link>
+        <router-link to="/cameras" class="btn">카메라 관리로</router-link>
+        <router-link to="/" class="btn primary">영상 화면으로</router-link>
       </div>
     </section>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue';
-import { useRouter } from 'vue-router';
-
-const router = useRouter();
+import { ref, onMounted } from 'vue';
+import { api } from '../api';
+import { messageFor, maskedUrl, APPLY_FAILED } from '../finder-messages';
 
 // --- 상태 ---
 const step = ref('select');   // select | credentials | probing | result | failed | manual | saved
+const origin = ref('scan');   // scan: 찾기/IP 입력으로 들어옴, rtsp: RTSP 주소 직접 입력
 const cameras = ref([]);
 const scanning = ref(false);
 const scanned = ref(false);
 const scanError = ref('');
+const registeredHosts = ref(new Set());
 
 const ip = ref('');
 const port = ref('');
@@ -141,42 +162,30 @@ const vendorHint = ref('');
 const username = ref('admin');
 const password = ref('');
 
+const rtspUrl = ref('');
+const rtspUser = ref('');
+const rtspPassword = ref('');
+const rtspName = ref('');
+
 const result = ref(null);
 const failMessage = ref('');
 const selected = ref(0);
 const name = ref('');
-const existing = ref([]);
-const saveMode = ref('append');
 const saving = ref(false);
 const saveError = ref('');
+const applied = ref(true);
 const copied = ref(false);
 const diagRef = ref(null);
 
-// --- API ---
-async function api(url, options = {}) {
-  const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
-  });
-  let finalPath = '';
-  try { finalPath = new URL(res.url).pathname; } catch (e) { /* url 없음 */ }
-  if (res.redirected || finalPath === '/login') {
-    router.push('/login');   // 세션 만료: authMiddleware 가 /login 으로 리다이렉트한 경우
-    throw new Error('로그인이 필요합니다.');
-  }
-  const type = res.headers.get('content-type') || '';
-  let data;
+// --- 동작 ---
+async function loadRegistered() {
   try {
-    if (!type.includes('application/json')) throw new Error('not json');
-    data = await res.json();
+    registeredHosts.value = new Set((await api('/api/cameras')).cameras.map(c => c.host));
   } catch (e) {
-    throw new Error(`서버 응답을 처리할 수 없습니다. (${res.status})`);
+    registeredHosts.value = new Set();
   }
-  if (!res.ok) throw new Error(data.message || `요청에 실패했습니다. (${res.status})`);
-  return data;
 }
 
-// --- 동작 ---
 async function runScan() {
   scanning.value = true;
   scanError.value = '';
@@ -192,6 +201,7 @@ async function runScan() {
 }
 
 function pickCamera(c) {
+  origin.value = 'scan';
   ip.value = c.ip;
   port.value = c.ports.length ? String(c.ports[0]) : '';
   vendorHint.value = [c.vendor, c.model].filter(Boolean).join(' ');
@@ -199,102 +209,72 @@ function pickCamera(c) {
 }
 
 function goCredentials() {
+  origin.value = 'scan';
   vendorHint.value = '';
   step.value = 'credentials';
 }
 
-async function runProbe(manual) {
+/** probe 를 실행하고, 못 찾으면 failed 단계로 보낸다. 찾았으면 결과를 돌려준다 */
+async function probe(body) {
   step.value = 'probing';
   try {
-    const body = {
-      ip: ip.value,
-      username: username.value,
-      password: password.value,
-      vendorHint: vendorHint.value,
-    };
-    if (manual) {
-      body.path = path.value;
-      if (port.value) body.port = port.value;
-    }
     result.value = await api('/api/finder/probe', { method: 'POST', body: JSON.stringify(body) });
   } catch (e) {
-    if (step.value === 'probing') {
-      failMessage.value = e.message;
-      result.value = null;
-      step.value = 'failed';
-    }
-    return;
-  }
-
-  if (result.value.status === 'found') {
-    selected.value = 0;
-    saveMode.value = 'append';
-    saveError.value = '';
-    try {
-      existing.value = (await api('/api/finder/cameras')).cameras;
-    } catch (e) {
-      existing.value = [];
-    }
-    step.value = 'result';
-  } else {
-    failMessage.value = messageFor(result.value);
+    failMessage.value = e.message;
+    result.value = null;
     step.value = 'failed';
+    return null;
+  }
+  if (result.value.status !== 'found') {
+    failMessage.value = messageFor(result.value, vendorHint.value);
+    step.value = 'failed';
+    return null;
+  }
+  return result.value;
+}
+
+async function runProbe(manual) {
+  const body = {
+    ip: ip.value,
+    username: username.value,
+    password: password.value,
+    vendorHint: vendorHint.value,
+  };
+  if (manual) {
+    body.path = path.value;
+    if (port.value) body.port = port.value;
+  }
+  if (!(await probe(body))) return;
+  selected.value = 0;
+  saveError.value = '';
+  step.value = 'result';
+}
+
+async function runRtspProbe() {
+  origin.value = 'rtsp';
+  vendorHint.value = '';
+  const r = await probe({ rtspUrl: rtspUrl.value, username: rtspUser.value, password: rtspPassword.value });
+  if (!r) return;
+  saveError.value = '';
+  const ok = await save(r.candidates[0].url, rtspName.value);
+  if (!ok) {
+    // 접속은 됐지만 저장 실패 (중복 등): 입력 화면으로 돌아가 이유를 보여 준다
+    scanError.value = saveError.value;
+    step.value = 'select';
   }
 }
 
-function messageFor(r) {
-  const vendor = vendorHint.value ? ` (감지된 제조사: ${vendorHint.value})` : '';
-  switch (r.status) {
-    case 'unreachable':
-      return '카메라에 연결할 수 없습니다. IP 주소가 맞는지, 카메라 전원과 네트워크 연결을 확인하세요.';
-    case 'auth_failed': {
-      if (r.authUnsupported) {
-        return '이 카메라는 지원하지 않는 로그인 방식(Digest SHA-256 등)을 사용합니다. 카메라 설명서의 RTSP 주소를 cctv.txt에 직접 입력해 주세요.';
-      }
-      const wait = r.retryAfterSec > 0 ? ` ${lockedNotice(r.retryAfterSec)}` : '';
-      return (r.ambiguous
-        ? `아이디/비밀번호 또는 경로 문제일 수 있습니다.${vendor} 카메라 자체 웹페이지에서 로그인되는 아이디/비밀번호인지 먼저 확인하고, 안 되면 "주소 직접 입력"을 사용하세요.`
-        : '카메라 아이디 또는 비밀번호가 맞지 않습니다. 카메라 자체 웹페이지에서 로그인되는 아이디/비밀번호인지 먼저 확인하세요.') + wait;
-    }
-    case 'auth_locked':
-      return `이 카메라는 최근 로그인 실패가 2회 쌓여 잠시 쉬는 중입니다. ${lockedNotice(r.retryAfterSec || 0)}`;
-    case 'rtsp_disabled':
-      return `카메라의 RTSP 기능이 꺼져 있는 것 같습니다.${vendor} 카메라 앱이나 자체 웹페이지의 설정(네트워크/스트리밍 등)에서 RTSP를 켠 뒤 다시 시도하세요.`;
-    case 'path_not_found':
-      return `카메라는 응답했지만 영상 주소를 찾지 못했습니다.${vendor} 카메라 설명서의 RTSP 주소를 확인해 "주소 직접 입력"을 사용하세요.`;
-    default:
-      return '주소를 찾지 못했습니다.';
-  }
-}
-
-// 실패가 2회 쌓여 대기에 들어갔을 때의 안내. 다시 시도할 수 있는 시각도 함께 보여 준다
-function lockedNotice(retryAfterSec) {
-  const min = Math.max(1, Math.ceil(retryAfterSec / 60));
-  const at = new Date(Date.now() + retryAfterSec * 1000).toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' });
-  return `카메라 자체 잠금을 막기 위해 약 ${min}분 뒤(${at}쯤)부터 다시 시도할 수 있습니다. `
-    + '그 사이 카메라 웹페이지에서 아이디/비밀번호를 확인해 두세요. 다른 카메라는 지금 바로 찾을 수 있습니다.';
-}
-
-// 화면에는 비밀번호를 가린 주소를 보여 준다
-function maskedUrl(url) {
-  return url.replace(/^(rtsp:\/\/[^:@/]*):[^@]*@/, '$1:****@');
-}
-
-async function save() {
+async function save(url, cameraName) {
   saving.value = true;
   saveError.value = '';
   try {
-    const body = { url: result.value.candidates[selected.value].url, name: name.value };
-    if (saveMode.value.startsWith('replace:')) {
-      body.mode = 'replace';
-      body.replaceIndex = Number(saveMode.value.split(':')[1]);
-    } else {
-      body.mode = 'append';
-    }
-    await api('/api/finder/save', { method: 'POST', body: JSON.stringify(body) });
+    const r = await api('/api/cameras', { method: 'POST', body: JSON.stringify({ url, name: cameraName }) });
+    applied.value = r.applied;
     step.value = 'saved';
+    return true;
   } catch (e) {
     saveError.value = e.message;
+    return false;
   } finally {
     saving.value = false;
   }
@@ -323,6 +303,11 @@ function reset() {
   result.value = null;
   name.value = '';
 }
+
+onMounted(() => {
+  loadRegistered();
+  runScan();
+});
 </script>
 
 <style scoped>
@@ -340,15 +325,17 @@ label { font-size: 13px; font-weight: 600; margin-top: 4px; }
 input, select, textarea { width: 100%; box-sizing: border-box; padding: 8px 10px; font-size: 16px; border: 1px solid #bbb; border-radius: 6px; }
 textarea { font-family: monospace; font-size: 12px; }
 button, .btn { padding: 8px 14px; font-size: 14px; border: 1px solid #bbb; background: #f5f5f5; color: #222; border-radius: 6px; cursor: pointer; text-decoration: none; display: inline-block; }
-button.primary { background: #007bff; border-color: #007bff; color: #fff; }
+button.primary, .btn.primary { background: #007bff; border-color: #007bff; color: #fff; }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 .row { display: flex; gap: 8px; align-items: center; }
 .row input { flex: 1; }
 .row.wrap { flex-wrap: wrap; }
 .camera-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.list-item { width: 100%; text-align: left; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-.tag { background: #e8f1ff; color: #0056b3; border-radius: 4px; padding: 1px 6px; font-size: 12px; margin-left: 6px; }
-.muted { color: #777; font-size: 13px; }
+.list-item { display: flex; gap: 10px; align-items: center; border: 1px solid #ddd; border-radius: 8px; padding: 8px 10px; }
+.grow { flex: 1; display: flex; gap: 6px 10px; align-items: center; flex-wrap: wrap; min-width: 0; }
+.done { color: #2e7d32; font-size: 13px; font-weight: 700; white-space: nowrap; }
+.tag { background: #e8f1ff; color: #0056b3; border-radius: 4px; padding: 1px 6px; font-size: 12px; }
+.muted { color: #777; font-size: 13px; margin: 0; }
 .desc { margin: 0 0 4px; }
 .notice { background: #fff8e1; border: 1px solid #ffe08a; border-radius: 6px; padding: 8px; font-size: 13px; margin: 4px 0; }
 .error { color: #c62828; margin: 4px 0; word-break: keep-all; }
@@ -356,7 +343,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .url { font-family: monospace; background: #f3f3f3; padding: 6px 8px; border-radius: 6px; word-break: break-all; }
 .radio { display: flex; gap: 8px; align-items: center; font-weight: 400; }
 .radio input { width: auto; }
-.manual-ip { margin-top: 12px; border-top: 1px solid #eee; padding-top: 12px; }
+.manual-ip { margin-top: 12px; border-top: 1px solid #eee; padding-top: 12px; display: flex; flex-direction: column; gap: 6px; }
 .diag { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
 .spinner { width: 32px; height: 32px; border: 4px solid #ddd; border-top-color: #007bff; border-radius: 50%; animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
