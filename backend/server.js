@@ -86,10 +86,15 @@ const { Go2rtcProcess } = require('./streams/go2rtc-process');
 const { buildConfig, DEFAULT_PORTS } = require('./streams/go2rtc-config');
 const { parseCameras } = require('./finder/cctv-file');
 const LOG_DIR = path.join(INSTALL_DIR, 'logs');
+// 연결 실패·운용 기록 (logs 폴더에만 남기고, 설정 화면의 "진단 정보 복사"로 문의 때 받는다)
+const { createDiag } = require('./diagnostics/diag');
+const { checkEnvironment } = require('./diagnostics/environment');
+const { stunBinding } = require('./diagnostics/stun');
+const diag = createDiag({ logDir: LOG_DIR, version: require('./package.json').version });
 const GO2RTC_AUTH = { username: 'cctvgo', password: crypto.randomBytes(24).toString('hex') };
 const go2rtcApi = new Go2rtcApi({ port: DEFAULT_PORTS.api, ...GO2RTC_AUTH });
 const streams = new StreamManager({ api: go2rtcApi });
-const go2rtc = new Go2rtcProcess({ installDir: INSTALL_DIR, logDir: LOG_DIR, onRestart: () => streams.resync() });
+const go2rtc = new Go2rtcProcess({ installDir: INSTALL_DIR, logDir: LOG_DIR, onRestart: () => streams.resync(), event: diag.event });
 // 서비스가 끝나면 go2rtc 도 끈다 (남겨 두면 다음 시작 때 포트가 겹친다)
 process.on('exit', () => go2rtc.stop());
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => process.exit(0));
@@ -115,7 +120,9 @@ registerFinderRoutes(app, { authMiddleware, baseDir: BASE_DIR, cctvPath: CCTV_CO
 
 // 영상 연결(WebRTC 시그널링) API
 const { registerLiveRoutes } = require('./streams/live-routes');
-registerLiveRoutes(app, { authMiddleware, streams, api: go2rtcApi });
+registerLiveRoutes(app, { authMiddleware, streams, api: go2rtcApi, diag });
+const { registerDiagRoutes } = require('./diagnostics/routes');
+registerDiagRoutes(app, { authMiddleware, diag });
 
 // 설정 화면 API (비밀번호 변경)
 const { registerSettingsRoutes } = require('./settings/routes');
@@ -167,4 +174,10 @@ app.listen(PORT, async () => {
   } catch (error) {
     console.error('Stream start failed:', error.message);
   }
+  // 환경 점검: 시작 후 한 번, 그 뒤 6시간마다 (실패해도 서비스에 영향 없음)
+  const checkEnv = () => checkEnvironment({ installDir: INSTALL_DIR, stun: () => stunBinding() })
+    .then(result => diag.env(result))
+    .catch(error => console.error('Environment check failed:', error.message));
+  checkEnv();
+  setInterval(checkEnv, 6 * 60 * 60 * 1000).unref();
 });
