@@ -24,18 +24,22 @@
           <button v-else class="primary" @click="pickCamera(c)">추가</button>
         </li>
       </ul>
-      <p v-if="scanned && cameras.length === 0" class="muted">찾은 카메라가 없습니다. 아래에 IP 주소나 RTSP 주소를 직접 입력하세요.</p>
+      <p v-if="scanned && cameras.length === 0" class="muted">찾은 카메라가 없습니다.</p>
 
-      <div class="manual-ip">
-        <label>IP 주소 직접 입력</label>
+      <p class="manual-head">목록에 카메라가 없으면 아래 두 방법 중 <strong>하나</strong>로 추가하세요.</p>
+
+      <div class="manual-box">
+        <p class="manual-title">방법 1. IP 주소로 추가</p>
         <div class="row">
           <input v-model.trim="ip" placeholder="예: 192.168.0.10" inputmode="decimal" />
           <button :disabled="!ip" @click="goCredentials">다음</button>
         </div>
       </div>
 
-      <div class="manual-ip">
-        <label>RTSP 주소 직접 입력</label>
+      <p class="or">또는</p>
+
+      <div class="manual-box">
+        <p class="manual-title">방법 2. RTSP 주소로 추가</p>
         <p class="muted">카메라나 녹화기(NVR) 설명서에 있는 RTSP 주소를 그대로 붙여 넣으세요.</p>
         <input v-model.trim="rtspUrl" placeholder="rtsp://192.168.0.5:554/Streaming/Channels/201" autocomplete="off" />
         <label>카메라 아이디</label>
@@ -343,7 +347,11 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .url { font-family: monospace; background: #f3f3f3; padding: 6px 8px; border-radius: 6px; word-break: break-all; }
 .radio { display: flex; gap: 8px; align-items: center; font-weight: 400; }
 .radio input { width: auto; }
-.manual-ip { margin-top: 12px; border-top: 1px solid #eee; padding-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+.manual-head { margin: 16px 0 0; border-top: 1px solid #eee; padding-top: 16px; }
+/* 두 직접 입력 방법이 한 양식처럼 보이지 않도록 각각 상자로 나눈다 */
+.manual-box { background: #fafafa; border: 1px solid #ddd; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+.manual-title { margin: 0; font-weight: 700; }
+.or { text-align: center; color: #777; font-size: 13px; margin: 0; }
 .diag { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
 .spinner { width: 32px; height: 32px; border: 4px solid #ddd; border-top-color: #007bff; border-radius: 50%; animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
