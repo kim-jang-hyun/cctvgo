@@ -82,7 +82,26 @@ echo ---------------------------------------------
 echo [INFO] Creating Cloudflare Tunnel
 
 :: **변경:** CUSTOMER_ID 입력을 make_package.bat에서 받습니다.
-set /p CUSTOMER_ID=고객 ID (예: user1):
+:: 고객 ID 는 접속 주소(고객ID.cctvgo.app)가 된다. 브라우저는 주소를 소문자로 바꿔 접속하는데
+:: 터널 설정(config.yml)의 hostname 은 대소문자를 구분하므로, 대문자는 소문자로 바꾸고 주소에 쓸 수 없는 글자는 다시 묻는다.
+:ASK_CUSTOMER_ID
+set "CUSTOMER_ID="
+set /p "CUSTOMER_ID=고객 ID (영문 소문자/숫자/-, 예: user1): "
+if not defined CUSTOMER_ID goto ASK_CUSTOMER_ID
+:: set 의 문자열 치환은 대소문자를 구분하지 않으므로 a=a 치환이 대문자 A 를 a 로 바꾼다
+for %%c in (a b c d e f g h i j k l m n o p q r s t u v w x y z) do set "CUSTOMER_ID=!CUSTOMER_ID:%%c=%%c!"
+set "ID_REST=!CUSTOMER_ID!"
+for %%c in (a b c d e f g h i j k l m n o p q r s t u v w x y z 0 1 2 3 4 5 6 7 8 9 -) do if defined ID_REST set "ID_REST=!ID_REST:%%c=!"
+set "ID_OK=1"
+if defined ID_REST set "ID_OK="
+if "!CUSTOMER_ID:~0,1!"=="-" set "ID_OK="
+if "!CUSTOMER_ID:~-1!"=="-" set "ID_OK="
+if not "!CUSTOMER_ID:~63!"=="" set "ID_OK="
+if not defined ID_OK (
+echo [ERROR] 고객 ID 에는 영문/숫자/-만 쓸 수 있고, -로 시작하거나 끝날 수 없습니다. ^(최대 63자^)
+goto ASK_CUSTOMER_ID
+)
+echo [INFO] 접속 주소: https://!CUSTOMER_ID!.cctvgo.app
 
 cd %CLOUDFLARE_DIR%
 :: **변경:** CUSTOMER_ID를 인수로 전달합니다.
