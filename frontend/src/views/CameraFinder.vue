@@ -36,7 +36,7 @@
 
       <div class="manual-ip">
         <label>RTSP 주소 직접 입력</label>
-        <p class="muted">카메라나 녹화기(NVR) 설명서에 있는 RTSP 주소를 그대로 붙여 넣으세요. 비밀번호의 특수문자는 변환하지 않아도 됩니다.</p>
+        <p class="muted">카메라나 녹화기(NVR) 설명서에 있는 RTSP 주소를 그대로 붙여 넣으세요.</p>
         <input v-model.trim="rtspUrl" placeholder="rtsp://192.168.0.5:554/Streaming/Channels/201" autocomplete="off" />
         <label>카메라 아이디</label>
         <input v-model.trim="rtspUser" autocomplete="off" />
