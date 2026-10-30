@@ -30,6 +30,7 @@ async function createMockRtsp({
     closeAfterResponse = false, // true 면 응답마다 Connection: close 를 붙이고 연결을 닫는다
     unknownSetupStatus = 200, // validPaths 에 없는 경로의 SETUP 에 줄 코드 (DESCRIBE 는 아무 경로나 받고 SETUP 에서 거절하는 카메라는 400)
     setupStatus = 200, // validPaths 경로의 SETUP 에 줄 코드 (UDP 만 지원해 TCP 전송을 거절하는 카메라는 461)
+    codecs = {}, // 경로별 영상 코덱 (SDP a=rtpmap). 기본 H264. 예: { '/onvif1': 'H265' }
     host = '127.0.0.1',
     port = 0,
 } = {}) {
@@ -114,7 +115,7 @@ async function createMockRtsp({
             }
             state.requests.push({ method, path: reqPath, authed: !!auth, code });
             const reason = { 200: 'OK', 401: 'Unauthorized', 404: 'Not Found' }[code] || 'Error';
-            const sdp = `v=0\r\no=- 0 0 IN IP4 ${host}\r\ns=Mock\r\nt=0 0\r\na=control:*\r\nm=video 0 RTP/AVP 96\r\na=rtpmap:96 H264/90000\r\na=control:${TRACK}\r\n`;
+            const sdp = `v=0\r\no=- 0 0 IN IP4 ${host}\r\ns=Mock\r\nt=0 0\r\na=control:*\r\nm=video 0 RTP/AVP 96\r\na=rtpmap:96 ${codecs[reqPath] || 'H264'}/90000\r\na=control:${TRACK}\r\n`;
             const body = code === 200 && method === 'DESCRIBE' ? sdp : '';
             if (body) extra += `Content-Type: application/sdp\r\nContent-Base: ${uri}/\r\n`;
             const response = `RTSP/1.0 ${code} ${reason}\r\nCSeq: 1\r\nServer: MockCam/1.0\r\n${extra}Content-Length: ${body.length}\r\n\r\n${body}`;

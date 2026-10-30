@@ -363,3 +363,76 @@ test('없는 경로에만 405를 주는 카메라: 실제 경로는 계속 찾�
         assert.equal(r.candidates[0].url, `rtsp://admin:pw@${HOST}:${cam.port}/c`);
     } finally { await cam.close(); }
 });
+
+// --- 코덱 확인과 서브 스트림 (H.265 카메라를 PC 브라우저에서도 보기 위해) ---
+const runPath = (cam, list, extra = {}) => run(cam, { settings: settingsFor(list), ...extra });
+
+test('H.264 메인: 코덱을 붙이고 서브는 찾지 않는다', async () => {
+    const cam = await createMockRtsp({ validPaths: ['/onvif1', '/onvif2'] });
+    try {
+        const r = await runPath(cam, ['/onvif1']);
+        assert.equal(r.candidates[0].codec, 'H264');
+        assert.equal(r.candidates[0].subUrl, undefined);
+        assert.ok(!cam.state.requests.some(q => q.path === '/onvif2'));
+    } finally { await cam.close(); }
+});
+
+test('H.265 메인: 대응하는 서브 경로를 한 번 확인해 함께 돌려준다 (서브도 H.265)', async () => {
+    const cam = await createMockRtsp({ validPaths: ['/onvif1', '/onvif2'], codecs: { '/onvif1': 'H265', '/onvif2': 'H265' } });
+    try {
+        const budget = new AuthBudget();
+        const r = await runPath(cam, ['/onvif1'], { budget });
+        const c = r.candidates[0];
+        assert.equal(c.url, `rtsp://admin:pw@${HOST}:${cam.port}/onvif1`);
+        assert.equal(c.codec, 'H265');
+        assert.equal(c.subUrl, `rtsp://admin:pw@${HOST}:${cam.port}/onvif2`);
+        assert.equal(c.subCodec, 'H265');
+        assert.equal(cam.state.failedAuth, 0);
+        assert.equal(budget.failures(HOST), 0);
+    } finally { await cam.close(); }
+});
+
+test('H.265 메인 + H.264 서브', async () => {
+    const cam = await createMockRtsp({ validPaths: ['/Streaming/Channels/101', '/Streaming/Channels/102'], codecs: { '/Streaming/Channels/101': 'H265' } });
+    try {
+        const c = (await runPath(cam, ['/Streaming/Channels/101'])).candidates[0];
+        assert.equal(c.subUrl, `rtsp://admin:pw@${HOST}:${cam.port}/Streaming/Channels/102`);
+        assert.equal(c.subCodec, 'H264');
+    } finally { await cam.close(); }
+});
+
+test('서브 경로가 없으면(404) 서브 없이 찾고 예산은 쓰지 않는다', async () => {
+    const cam = await createMockRtsp({ validPaths: ['/onvif1'], codecs: { '/onvif1': 'H265' } });
+    try {
+        const budget = new AuthBudget();
+        const r = await runPath(cam, ['/onvif1'], { budget });
+        assert.equal(r.status, 'found');
+        assert.equal(r.candidates[0].subUrl, undefined);
+        assert.equal(budget.failures(HOST), 0);
+    } finally { await cam.close(); }
+});
+
+test('서브 확인이 401 이면 예산에 1회 기록하고 메인은 그대로 찾는다', async () => {
+    const cam = await createMockRtsp({ validPaths: ['/onvif1'], codecs: { '/onvif1': 'H265' }, pathOverrides: { '/onvif2': 401 } });
+    try {
+        const budget = new AuthBudget();
+        const r = await runPath(cam, ['/onvif1'], { budget });
+        assert.equal(r.status, 'found');
+        assert.equal(r.candidates[0].subUrl, undefined);
+        assert.equal(budget.failures(HOST), 1);
+    } finally { await cam.close(); }
+});
+
+test('ONVIF: 순서는 그대로 두고 H.265 후보에 다른 프로파일(H.264 우선)을 서브로 붙인다', async () => {
+    const rtsp = await createMockRtsp({ validPaths: ['/onvif/profile1', '/onvif/profile2'], codecs: { '/onvif/profile1': 'H265' } });
+    const onvif = await createMockOnvif({ rtspPort: rtsp.port });
+    try {
+        const r = await run(rtsp, { settings: settingsFor(['/a'], [onvif.port]) });
+        assert.equal(r.candidates[0].url, `rtsp://admin:pw@${HOST}:${rtsp.port}/onvif/profile1`);
+        assert.equal(r.candidates[0].codec, 'H265');
+        assert.equal(r.candidates[0].subUrl, `rtsp://admin:pw@${HOST}:${rtsp.port}/onvif/profile2`);
+        assert.equal(r.candidates[0].subCodec, 'H264');
+        assert.equal(r.candidates[1].codec, 'H264');
+        assert.equal(r.candidates[1].subUrl, undefined);
+    } finally { await rtsp.close(); await onvif.close(); }
+});

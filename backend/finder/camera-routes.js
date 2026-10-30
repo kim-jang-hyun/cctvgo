@@ -1,7 +1,7 @@
 'use strict';
 const fs = require('fs');
 const { isPrivateIPv4, createRateLimiter, createLock } = require('./guard');
-const { parseCameras, parseRtspUrl, saveCameras } = require('./cctv-file');
+const { parseCameras, parseRtspUrl, saveCameras, withCredentials } = require('./cctv-file');
 
 /**
  * 카메라 관리 API (목록/추가/수정/삭제) 와 영상 화면용 채널 목록.
@@ -30,6 +30,15 @@ function registerCameraRoutes(app, { authMiddleware, cctvPath, streams, shared }
         let parsed;
         try { parsed = new URL(url); } catch (e) { return '카메라 주소가 올바르지 않습니다.'; }
         if (parsed.protocol !== 'rtsp:' || !isPrivateIPv4(parsed.hostname)) return 'rtsp:// 로 시작하는 사설 IP 주소만 저장할 수 있습니다.';
+        return null;
+    }
+
+    /** 서브 스트림 주소: 메인과 같은 카메라(IP)의 rtsp 주소만 받는다 */
+    function subUrlError(subUrl, url) {
+        if (subUrl === undefined || subUrl === null || subUrl === '') return null;
+        const e = urlError(subUrl);
+        if (e) return `서브 스트림 ${e}`;
+        if (parseRtspUrl(subUrl)?.host !== parseRtspUrl(url)?.host) return '서브 스트림 주소가 이 카메라와 맞지 않습니다.';
         return null;
     }
 
@@ -99,10 +108,11 @@ function registerCameraRoutes(app, { authMiddleware, cctvPath, streams, shared }
     });
 
     app.post('/api/cameras', authMiddleware, async (req, res) => {
-        const { url, name } = req.body || {};
-        const error = urlError(url) || textError([['카메라 이름', name]]);
+        const { url, name, subUrl } = req.body || {};
+        const error = urlError(url) || subUrlError(subUrl, url) || textError([['카메라 이름', name]]);
         if (error) return bad(res, error);
-        const done = await commit(req, res, { type: 'append', url, name: name || '' }, () => streams.add(url));
+        const sub = subUrl || null;
+        const done = await commit(req, res, { type: 'append', url, name: name || '', subUrl: sub }, () => streams.add(url, sub));
         if (done) res.json({ status: 'success', index: done.index, applied: done.applied });
     });
 
@@ -118,8 +128,8 @@ function registerCameraRoutes(app, { authMiddleware, cctvPath, streams, shared }
         return { index, hash, target };
     }
 
-    async function saveNewUrl(req, res, { index, hash, name, oldUrl, url }) {
-        const done = await commit(req, res, { type: 'update', index, hash, url, name }, () => streams.restart(oldUrl, url));
+    async function saveNewUrl(req, res, { index, hash, name, oldUrl, url, subUrl }) {
+        const done = await commit(req, res, { type: 'update', index, hash, url, name, subUrl }, () => streams.restart(oldUrl, url, subUrl));
         if (done) res.json({ status: 'saved', applied: done.applied });
     }
 
@@ -166,14 +176,19 @@ function registerCameraRoutes(app, { authMiddleware, cctvPath, streams, shared }
             return res.json(rest);
         }
         // 이 카메라(같은 IP)의 주소만 받아들인다
-        const urls = (result.candidates || []).map(c => c.url).filter(u => parseRtspUrl(u)?.host === parts.host && !urlError(u));
-        const labels = (result.candidates || []).filter(c => urls.includes(c.url)).map(c => c.label);
+        const okCands = (result.candidates || []).filter(c => parseRtspUrl(c.url)?.host === parts.host && !urlError(c.url));
+        const urls = okCands.map(c => c.url);
+        const labels = okCands.map(c => c.label);
+        // 서브 주소: 찾은 후보에 있으면 그것을, 없으면 기존 서브 주소의 계정만 새 계정으로 바꾼다
+        const newPass = password || parts.password;
+        const subs = okCands.map(c => (c.subUrl && !subUrlError(c.subUrl, c.url) ? c.subUrl
+            : target.subUrl && parseRtspUrl(target.subUrl)?.host === parts.host ? withCredentials(target.subUrl, { username: newUser, password: newPass }) : null));
         if (urls.length === 0) return bad(res, '찾은 주소가 이 카메라와 맞지 않습니다.');
         const newName = name ?? target.name;
-        if (urls.length === 1) return saveNewUrl(req, res, { index, hash, name: newName, oldUrl: target.url, url: urls[0] });
+        if (urls.length === 1) return saveNewUrl(req, res, { index, hash, name: newName, oldUrl: target.url, url: urls[0], subUrl: subs[0] });
 
         // 여러 스트림이 나오면 사용자가 고른다. 주소(비밀번호 포함)는 세션에만 두고 화면에는 가린 주소만 보낸다
-        req.session.pendingEdit = { index, hash, name: newName, oldUrl: target.url, urls };
+        req.session.pendingEdit = { index, hash, name: newName, oldUrl: target.url, urls, subs };
         const preselect = Math.max(0, urls.findIndex(u => parseRtspUrl(u).path === parts.path && parseRtspUrl(u).port === parts.port));
         res.json({ status: 'choose', preselect, candidates: urls.map((u, i) => ({ label: labels[i] || `스트림 ${i + 1}`, maskedUrl: maskedUrl(u) })) });
     });
@@ -186,7 +201,7 @@ function registerCameraRoutes(app, { authMiddleware, cctvPath, streams, shared }
             return conflict(res, '목록이 바뀌었습니다. 화면을 다시 열어 주세요.');
         }
         delete req.session.pendingEdit;
-        return saveNewUrl(req, res, { index, hash, name: pending.name, oldUrl: pending.oldUrl, url: pending.urls[choice] });
+        return saveNewUrl(req, res, { index, hash, name: pending.name, oldUrl: pending.oldUrl, url: pending.urls[choice], subUrl: (pending.subs || [])[choice] || null });
     });
 
     app.delete('/api/cameras/:index', authMiddleware, async (req, res) => {

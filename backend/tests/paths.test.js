@@ -71,3 +71,32 @@ test('외부 경로는 내장 후보와 겹쳐도 항상 맨 앞에 온다 (외�
     assert.equal(new Set(list).size, list.length, '중복 없음');
     assert.equal(list.filter(p => p === '/ipcam.sdp').length, 1);
 });
+
+// --- 서브 스트림 경로 ---
+const { subPathFor } = require('../finder/paths');
+
+test('subPathFor: 흔한 메인 경로를 서브 경로로 바꾼다', () => {
+    const cases = {
+        '/Streaming/Channels/101': '/Streaming/Channels/102',
+        '/Streaming/Channels/201': '/Streaming/Channels/202',
+        '/cam/realmonitor?channel=1&subtype=0': '/cam/realmonitor?channel=1&subtype=1',
+        '/h264Preview_01_main': '/h264Preview_01_sub',
+        '/h264/ch1/main/av_stream': '/h264/ch1/sub/av_stream',
+        '/stream1': '/stream2',
+        '/onvif1': '/onvif2',
+        '/profile1/media.smp': '/profile2/media.smp',
+        '/onvif/profile1/media.smp': '/onvif/profile2/media.smp',
+        '/live/ch00_0': '/live/ch00_1',
+        '/videoMain': '/videoSub',
+        '/media/video1': '/media/video2',
+        '/live1.sdp': '/live2.sdp',
+        '/unicast/c1/s0/live': '/unicast/c1/s1/live',
+        '/s0': '/s1',
+        '/11': '/12',
+    };
+    for (const [main, sub] of Object.entries(cases)) assert.equal(subPathFor(main), sub, main);
+});
+
+test('subPathFor: 해당 규칙이 없으면 null', () => {
+    for (const p of ['/live', '/h264', '/ch01', '/axis-media/media.amp', '/stream2', '/onvif2']) assert.equal(subPathFor(p), null, p);
+});

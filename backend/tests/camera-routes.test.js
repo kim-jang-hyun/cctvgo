@@ -19,8 +19,8 @@ function fakeStreams() {
         calls,
         fail: false,
         gate: null,
-        async add(url) { calls.push(['add', url]); if (this.gate) await this.gate; if (this.fail) throw new Error('x'); return 9; },
-        async restart(oldUrl, url) { calls.push(['restart', oldUrl, url]); if (this.fail) throw new Error('x'); },
+        async add(url, subUrl) { calls.push(subUrl ? ['add', url, subUrl] : ['add', url]); if (this.gate) await this.gate; if (this.fail) throw new Error('x'); return 9; },
+        async restart(oldUrl, url, subUrl) { calls.push(subUrl ? ['restart', oldUrl, url, subUrl] : ['restart', oldUrl, url]); if (this.fail) throw new Error('x'); },
         async remove(url) { calls.push(['remove', url]); if (this.fail) throw new Error('x'); },
         streamIds(urls) { return urls.map((u, i) => (i === 1 ? null : i + 7)); },
     };
@@ -353,5 +353,75 @@ test('probe rtspUrl: 주소의 계정보다 본문 계정이 우선하고, 특�
         const pub = await app.call('POST', '/api/finder/probe', { rtspUrl: 'rtsp://8.8.8.8/live' });
         assert.equal(pub.status, 400);
         assert.equal(seen.length, 2);
+    } finally { await app.close(); }
+});
+
+// --- 서브 스트림 주소 ---
+const MAIN5 = 'rtsp://admin:secret@192.168.0.7:554/onvif1';
+const SUB5 = 'rtsp://admin:secret@192.168.0.7:554/onvif2';
+
+test('POST /api/cameras: 서브 주소를 함께 저장하고 streams.add(url, subUrl)', async () => {
+    const app = await startApp();
+    try {
+        const res = await app.call('POST', '/api/cameras', { url: MAIN5, name: '마당', subUrl: SUB5 });
+        assert.equal(res.status, 200);
+        const cam = app.cams()[2];
+        assert.equal(cam.url, MAIN5);
+        assert.equal(cam.subUrl, SUB5);
+        assert.deepEqual(app.streams.calls, [['add', MAIN5, SUB5]]);
+    } finally { await app.close(); }
+});
+
+test('POST /api/cameras: 다른 카메라(IP)의 서브 주소나 잘못된 서브 주소는 400', async () => {
+    const app = await startApp();
+    const before = app.read();
+    try {
+        for (const subUrl of ['rtsp://admin:secret@192.168.0.8:554/onvif2', 'http://192.168.0.7/x', 'rtsp://a:b@192.168.0.7:554/x, y', 123]) {
+            const res = await app.call('POST', '/api/cameras', { url: MAIN5, name: '마당', subUrl });
+            assert.equal(res.status, 400, String(subUrl));
+        }
+        assert.equal(app.read(), before);
+        assert.deepEqual(app.streams.calls, []);
+    } finally { await app.close(); }
+});
+
+test('edit: 계정을 바꾸면 기존 서브 주소의 계정도 함께 바꾼다', async () => {
+    const app = await startApp({
+        cctvText: `${MAIN5}, 마당, ${SUB5}
+`,
+        deps: { findStream: async () => found('rtsp://admin:new@192.168.0.7:554/onvif1') },
+    });
+    try {
+        const before = app.cams();
+        const res = await app.call('POST', '/api/cameras/0/edit', { hash: before[0].hash, username: 'admin', password: 'new' });
+        assert.deepEqual(await res.json(), { status: 'saved', applied: true });
+        const after = app.cams()[0];
+        assert.equal(after.url, 'rtsp://admin:new@192.168.0.7:554/onvif1');
+        assert.equal(after.subUrl, 'rtsp://admin:new@192.168.0.7:554/onvif2');
+        assert.deepEqual(app.streams.calls, [['restart', MAIN5, 'rtsp://admin:new@192.168.0.7:554/onvif1', 'rtsp://admin:new@192.168.0.7:554/onvif2']]);
+    } finally { await app.close(); }
+});
+
+test('edit: 찾은 후보에 서브 주소가 있으면 그 주소를 쓴다', async () => {
+    const newSub = 'rtsp://admin:new@192.168.0.5:554/x2';
+    const app = await startApp({
+        deps: { findStream: async () => ({ status: 'found', candidates: [{ url: 'rtsp://admin:new@192.168.0.5:554/x', label: 'main', subUrl: newSub }], tried: [], diagnostics: '' }) },
+    });
+    try {
+        const before = app.cams();
+        await app.call('POST', '/api/cameras/0/edit', { hash: before[0].hash, username: 'admin', password: 'new' });
+        assert.equal(app.cams()[0].subUrl, newSub);
+    } finally { await app.close(); }
+});
+
+test('edit: 이름만 바꾸면 서브 주소가 지워지지 않는다', async () => {
+    const app = await startApp({ cctvText: `${MAIN5}, 마당, ${SUB5}
+` });
+    try {
+        const before = app.cams();
+        await app.call('POST', '/api/cameras/0/edit', { hash: before[0].hash, name: '뒷마당' });
+        const after = app.cams()[0];
+        assert.equal(after.name, '뒷마당');
+        assert.equal(after.subUrl, SUB5);
     } finally { await app.close(); }
 });

@@ -3,7 +3,7 @@ const { describe } = require('./rtsp-probe');
 const onvif = require('./onvif');
 const { tcpOpen, RTSP_PORTS } = require('./scan');
 const { buildRtspUrl } = require('./cctv-file');
-const { orderedPaths } = require('./paths');
+const { orderedPaths, subPathFor } = require('./paths');
 
 /**
  * 카메라 RTSP URL 탐색 오케스트레이션.
@@ -52,9 +52,22 @@ async function findStream({
     // 카메라가 지원하지 않는 로그인 방식(Digest SHA-256 등)이면 자격 증명을 보내지 않았으므로 예산 소모 없이 바로 끝낸다
     const unsupported = r => r.reason === 'unsupported-auth';
     const finishUnsupported = () => finish('auth_failed', { ambiguous: true, authUnsupported: true });
-    const candidate = (rtspPort, p, source, label) => ({
-        url: buildRtspUrl({ username, password, host, port: rtspPort, path: p }), source, label,
+    const candidate = (rtspPort, p, source, label, codec = null) => ({
+        url: buildRtspUrl({ username, password, host, port: rtspPort, path: p }), source, label, codec,
     });
+
+    /**
+     * H.265 메인이면 대응하는 서브 경로를 한 번만 확인해 붙인다 (PC 브라우저용 대체, 고객 설정 없이).
+     * 계정은 이미 맞았으므로 보통 404 만 나온다. 401 이면 attempt() 가 예산에 기록한다.
+     */
+    async function withSub(c, rtspPort, p) {
+        if (c.codec !== 'H265') return c;
+        const sub = subPathFor(p);
+        if (!sub || budget.isExhausted(host)) return c;
+        const r = await attempt(rtspPort, sub);
+        if (r.status !== 'ok') return c;
+        return { ...c, subUrl: buildRtspUrl({ username, password, host, port: rtspPort, path: sub }), subCodec: r.codec || null };
+    }
 
     function noteHeaders(h) {
         if (!h) return;
@@ -99,7 +112,7 @@ async function findStream({
         if (ports.length === 0) return finish('unreachable');
         const r = await attempt(ports[0], normalized);
         if (unsupported(r)) return finishUnsupported();
-        if (r.status === 'ok') return finish('found', { candidates: [candidate(ports[0], normalized, 'manual', normalized)] });
+        if (r.status === 'ok') return finish('found', { candidates: [await withSub(candidate(ports[0], normalized, 'manual', normalized, r.codec), ports[0], normalized)] });
         if (r.status === 'unreachable') return finish('unreachable');
         if (r.status === 'unauthorized') return finish('auth_failed', { ambiguous: true });
         return finish('path_not_found');
@@ -125,10 +138,17 @@ async function findStream({
             const p = (u.pathname || '/') + (u.search || '');
             const r = await attempt(rtspPort, p);   // 카메라가 알려 준 주소라도 실제 접속을 확인한다
             if (unsupported(r)) return finishUnsupported();
-            if (r.status === 'ok') verified.push(candidate(rtspPort, p, 'onvif', item.name || item.token));
+            if (r.status === 'ok') verified.push(candidate(rtspPort, p, 'onvif', item.name || item.token, r.codec));
             else if (r.status === 'unreachable') break;
         }
-        if (verified.length) return finish('found', { candidates: verified });
+        // H.265 후보에는 다른 프로파일(H.264 우선)을 서브로 붙인다. 순서는 바꾸지 않는다 (메인 화질 유지)
+        const withSubs = verified.map(c => {
+            if (c.codec !== 'H265') return c;
+            const others = verified.filter(o => o !== c);
+            const sub = others.find(o => o.codec === 'H264') || others[0];
+            return sub ? { ...c, subUrl: sub.url, subCodec: sub.codec } : c;
+        });
+        if (verified.length) return finish('found', { candidates: withSubs });
     } else if (on.status === 'auth_failed') {
         budget.recordFailure(host);
         if (budget.isExhausted(host)) return finish('auth_failed', { ambiguous: false });
@@ -159,7 +179,7 @@ async function findStream({
         if (unsupported(r)) return finishUnsupported();
         rejected = rejected && METHOD_REJECTED.has(r.code) ? rejected + 1 : 0;
         if (rejected > DISABLED_CONFIRM) return finish('rtsp_disabled');
-        if (r.status === 'ok') return finish('found', { candidates: [candidate(rtspPort, p, 'path', p)] });
+        if (r.status === 'ok') return finish('found', { candidates: [await withSub(candidate(rtspPort, p, 'path', p, r.codec), rtspPort, p)] });
         if (r.status === 'unreachable') return finish('unreachable');
         if (r.status === 'unauthorized' && strict) return finish('auth_failed', { ambiguous: false });
     }

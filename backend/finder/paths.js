@@ -148,4 +148,32 @@ function orderedPaths(settings, vendorHint = '') {
     ]);
 }
 
-module.exports = { BUILT_IN_PATHS, loadSettings, orderedPaths };
+/**
+ * 메인 스트림 경로에 대응하는 서브 스트림 경로 (H.265 메인 카메라에서 PC 브라우저용 대체를 찾을 때 쓴다).
+ * 처음 맞는 규칙 하나만 적용한다. 해당 규칙이 없으면 null.
+ */
+const SUB_RULES = [
+    [/^(\/Streaming\/Channels\/\d)01$/i, '$102'],
+    [/subtype=0/i, 'subtype=1'],
+    [/_main$/i, '_sub'],
+    [/\/(ch\d+)\/main\//i, '/$1/sub/'],
+    [/\/stream1$/i, '/stream2'],
+    [/\/onvif1$/i, '/onvif2'],
+    [/\/profile1(\/|$)/i, '/profile2$1'],
+    [/\/live\/ch00_0$/i, '/live/ch00_1'],
+    [/\/videoMain$/, '/videoSub'],
+    [/\/media\/video1$/i, '/media/video2'],
+    [/\/live1\.sdp$/i, '/live2.sdp'],
+    [/\/unicast\/c(\d+)\/s0\//i, '/unicast/c$1/s1/'],
+    [/^\/s0$/, '/s1'],
+    [/^\/11$/, '/12'],
+];
+
+function subPathFor(p) {
+    for (const [re, to] of SUB_RULES) {
+        if (re.test(p)) return p.replace(re, to);
+    }
+    return null;
+}
+
+module.exports = { BUILT_IN_PATHS, loadSettings, orderedPaths, subPathFor };

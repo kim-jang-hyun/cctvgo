@@ -88,7 +88,7 @@
       <p v-if="saveError" class="error">{{ saveError }}</p>
       <div class="row">
         <button @click="reset">처음으로</button>
-        <button class="primary" :disabled="saving" @click="save(result.candidates[selected].url, name)">{{ saving ? '추가 중...' : '추가' }}</button>
+        <button class="primary" :disabled="saving" @click="save(result.candidates[selected], name)">{{ saving ? '추가 중...' : '추가' }}</button>
       </div>
     </section>
 
@@ -260,7 +260,7 @@ async function runRtspProbe() {
   const r = await probe({ rtspUrl: rtspUrl.value, username: rtspUser.value, password: rtspPassword.value });
   if (!r) return;
   saveError.value = '';
-  const ok = await save(r.candidates[0].url, rtspName.value);
+  const ok = await save(r.candidates[0], rtspName.value);
   if (!ok) {
     // 접속은 됐지만 저장 실패 (중복 등): 입력 화면으로 돌아가 이유를 보여 준다
     scanError.value = saveError.value;
@@ -268,11 +268,12 @@ async function runRtspProbe() {
   }
 }
 
-async function save(url, cameraName) {
+// 후보에 서브 스트림(H.265 카메라의 PC 브라우저용 대체)이 있으면 함께 저장한다
+async function save(candidate, cameraName) {
   saving.value = true;
   saveError.value = '';
   try {
-    const r = await api('/api/cameras', { method: 'POST', body: JSON.stringify({ url, name: cameraName }) });
+    const r = await api('/api/cameras', { method: 'POST', body: JSON.stringify({ url: candidate.url, name: cameraName, subUrl: candidate.subUrl || null }) });
     applied.value = r.applied;
     step.value = 'saved';
     return true;
