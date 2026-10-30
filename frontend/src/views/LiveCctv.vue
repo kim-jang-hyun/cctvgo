@@ -12,8 +12,9 @@
     <template v-if="isMobile && cameraList">
       <div class="mobile-video-wrap">
         <div class="video-label mobile-label">{{ currentMobileCamera?.name || '선택된 카메라' }}</div>
+        <div v-if="currentMobileCamera && statusText(currentMobileCamera.id)" class="video-status">{{ statusText(currentMobileCamera.id) }}</div>
         <video
-          v-if="currentMobileCamera?.url"
+          v-if="currentMobileCamera?.stream != null"
           ref="mobileVideoRef"
           class="mobile-video"
           autoplay
@@ -52,8 +53,9 @@
       <template #item="{ element, index }">
         <div class="video-container">
           <div class="video-label">{{ element.name }}</div>
+          <div v-if="element.stream != null && statusText(element.id)" class="video-status">{{ statusText(element.id) }}</div>
           <video
-            v-if="element.url !== null"
+            v-if="element.stream != null"
             :ref="el => videoElements[index] = el"
             class="video-player"
             :data-index="index"
@@ -70,7 +72,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
-import Hls from 'hls.js';
+import { connectStream } from '../webrtc';
 import draggable from 'vuedraggable';
 import SettingsIcon from '../components/SettingsIcon.vue';
 
@@ -79,16 +81,14 @@ const ROWS = 2;
 const MIN_COLUMNS = 2;
 const MOBILE_BREAKPOINT = 768;
 
-const hlsConfig = {
-  enableWorker: true,
-  lowLatencyMode: true,
-  backBufferLength: 0,
-  maxBufferLength: 4,
-  maxMaxBufferLength: 10,
-  liveSyncDurationCount: 1.5,
-  liveMaxLatencyDurationCount: 3,
-  manifestLoadingMaxRetry: 10,
-  levelLoadingMaxRetry: 10,
+// 연결 상태별 안내 문구 (재생 중이면 표시하지 않음)
+const STATUS_TEXT = {
+  connecting: '연결 중...',
+  network: '이 네트워크 환경에서는 외부 시청이 불가능합니다',
+  disconnected: '연결이 끊겼습니다. 다시 연결하는 중...',
+  codec: '이 브라우저에서는 이 카메라 영상(H.265)을 재생할 수 없습니다',
+  camera: '카메라가 응답하지 않습니다',
+  signaling: '서버에 연결하지 못했습니다. 다시 시도하는 중...',
 };
 
 // --- 상태 ---
@@ -98,10 +98,18 @@ const error = ref(null);
 const isMobile = ref(false);
 const selectedMobileIndex = ref(0);
 const mobileVideoRef = ref(null);
-let mobileHlsInstance = null;
+let mobileClose = null;
 
-const hlsInstances = [];
+const closers = [];   // 데스크톱 칸별 연결 정리 함수
 const videoElements = reactive([]);
+const status = reactive({});   // 카메라 id → { state, reason }
+
+const statusText = id => {
+  const st = status[id];
+  if (!st || st.state === 'playing') return '';
+  return st.state === 'connecting' ? STATUS_TEXT.connecting : STATUS_TEXT[st.reason] || STATUS_TEXT.network;
+};
+const watchState = id => (state, detail = {}) => { status[id] = { state, reason: detail.reason }; };
 
 // --- computed ---
 const gridColumns = computed(() => {
@@ -109,7 +117,7 @@ const gridColumns = computed(() => {
   return n ? Math.max(MIN_COLUMNS, Math.ceil(n / ROWS)) : MIN_COLUMNS;
 });
 
-const camerasWithUrl = computed(() => (cameraList.value || []).filter(c => c?.url));
+const camerasWithUrl = computed(() => (cameraList.value || []).filter(c => c?.stream != null));
 
 const currentMobileCamera = computed(
   () => camerasWithUrl.value[selectedMobileIndex.value] ?? null
@@ -141,7 +149,7 @@ const getCameraList = async () => {
   return channelList;
 };
 
-// channels: [{ name, url }] — 영상 주소는 서버가 정한다 (카메라를 지워도 다른 카메라의 영상 번호는 그대로라 순번으로 계산하면 안 된다)
+// channels: [{ name, stream }] — 카메라 번호(stream)는 서버가 정한다 (카메라를 지워도 다른 카메라의 번호는 그대로라 순번으로 계산하면 안 된다)
 const initCameraList = (channels) => {
   if (error.value !== null) {
     console.error('initCameraList error: ', error.value);
@@ -158,57 +166,44 @@ const initCameraList = (channels) => {
     cameraList.value.push({
       id: 'cam' + (i + 1),
       name: hasCamera ? channels[i].name : null,
-      url: hasCamera ? channels[i].url : null,
+      stream: hasCamera ? channels[i].stream : null,
     });
   }
   console.log(`cameraList가 ${cameraCount}개(그리드 ${columns}x${ROWS}=${totalSlots}칸)로 초기화되었습니다.`, cameraList.value);
 };
 
-// --- HLS · 플레이어 ---
+// --- WebRTC · 플레이어 ---
 function initMobilePlayer() {
-  if (!mobileVideoRef.value || !currentMobileCamera.value?.url) return;
-  if (mobileHlsInstance) {
-    mobileHlsInstance.destroy();
-    mobileHlsInstance = null;
+  if (mobileClose) {
+    mobileClose();
+    mobileClose = null;
   }
-  const video = mobileVideoRef.value;
-  const url = currentMobileCamera.value.url;
-  if (Hls.isSupported()) {
-    const hls = new Hls(hlsConfig);
-    hls.loadSource(url);
-    hls.attachMedia(video);
-    mobileHlsInstance = hls;
-  } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-    video.src = url;
-  }
+  const cam = currentMobileCamera.value;
+  if (!mobileVideoRef.value || cam?.stream == null) return;
+  mobileClose = connectStream(mobileVideoRef.value, cam.stream, { onState: watchState(cam.id) });
+}
+
+function closeDesktopPlayers() {
+  closers.forEach(close => close());
+  closers.length = 0;
 }
 
 function initPlayers() {
-  hlsInstances.forEach(hls => hls.destroy());
-  hlsInstances.length = 0;
+  closeDesktopPlayers();
 
   if (isMobile.value) {
     initMobilePlayer();
     return;
   }
+  if (mobileClose) {
+    mobileClose();
+    mobileClose = null;
+  }
 
-  cameraList.value.forEach((stream, index) => {
+  cameraList.value.forEach((cam, index) => {
     const video = videoElements[index];
-    if (!video) return;
-    if (stream.url == null) {
-      video.src = '';
-      return;
-    }
-    if (Hls.isSupported()) {
-      const hls = new Hls(hlsConfig);
-      hls.loadSource(stream.url);
-      hls.attachMedia(video);
-      hlsInstances.push(hls);
-    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = stream.url;
-    } else {
-      alert(`HLS를 지원하지 않는 브라우저입니다. (Stream: ${stream.name})`);
-    }
+    if (!video || cam.stream == null) return;
+    closers.push(connectStream(video, cam.stream, { onState: watchState(cam.id) }));
   });
 }
 
@@ -246,9 +241,10 @@ onMounted(async () => {
 onUnmounted(() => {
   mobileQuery.removeEventListener('change', checkMobile);
   window.removeEventListener('resize', checkMobile);
-  if (mobileHlsInstance) {
-    mobileHlsInstance.destroy();
-    mobileHlsInstance = null;
+  closeDesktopPlayers();
+  if (mobileClose) {
+    mobileClose();
+    mobileClose = null;
   }
 });
 </script>
@@ -297,6 +293,22 @@ h2 {
 
 .settings-link:hover {
   color: #007bff;
+}
+
+/* 연결 상태 안내 (재생 중에는 숨김) */
+.video-status {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  color: #ddd;
+  font-size: 14px;
+  text-align: center;
+  word-break: keep-all;
+  pointer-events: none;
 }
 
 /* --- 데스크톱 그리드 --- */
@@ -367,6 +379,7 @@ h2 {
 
 /* --- 모바일 --- */
 .mobile-video-wrap {
+  position: relative;
   flex: 1;
   display: flex;
   flex-direction: column;
