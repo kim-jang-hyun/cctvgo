@@ -23,13 +23,13 @@ async function fakeServer(handler) {
 
 const AUTH = 'Basic ' + Buffer.from('u:p').toString('base64');
 
-test('putStream/deleteStream: 이름과 주소를 인코딩해 보내고 Basic 인증을 붙인다', async () => {
+test('putStream/deleteStream: PATCH 로 추가·갱신하고(설정 파일을 건드리지 않음) 이름과 주소를 인코딩해 보내며 Basic 인증을 붙인다', async () => {
     const s = await fakeServer((r, res) => res.end(''));
     try {
         const api = new Go2rtcApi({ port: s.port, username: 'u', password: 'p' });
         await api.putStream('s1', 'rtsp://a:b%21@192.168.0.5:554/x?c=1&d=2');
         await api.deleteStream('s1');
-        assert.equal(s.requests[0].method, 'PUT');
+        assert.equal(s.requests[0].method, 'PATCH');
         const q = new URL(s.requests[0].url, 'http://x').searchParams;
         assert.equal(q.get('name'), 's1');
         assert.equal(q.get('src'), 'rtsp://a:b%21@192.168.0.5:554/x?c=1&d=2');

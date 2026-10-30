@@ -18,9 +18,13 @@ class Go2rtcApi {
         return this.fetchImpl(this.base + pathAndQuery, { method, headers, body, signal: AbortSignal.timeout(this.timeoutMs) });
     }
 
+    /**
+     * 스트림 추가 또는 갱신. PUT 은 go2rtc 가 설정 파일까지 고쳐 쓰다 실패(400)하고 이미 있는 이름도 거절한다.
+     * PATCH 는 새 이름이면 추가, 있으면 갱신하고 설정 파일을 건드리지 않는다 (카메라 목록의 기준은 cctv.txt 하나)
+     */
     async putStream(name, src) {
         const qs = new URLSearchParams({ name, src }).toString();
-        const res = await this._request('PUT', `/api/streams?${qs}`);
+        const res = await this._request('PATCH', `/api/streams?${qs}`);
         if (!res.ok) throw new Error(`go2rtc 스트림 추가 실패 (${res.status})`);
     }
 

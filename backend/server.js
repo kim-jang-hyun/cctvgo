@@ -85,6 +85,7 @@ const { Go2rtcApi } = require('./streams/go2rtc-api');
 const { Go2rtcProcess } = require('./streams/go2rtc-process');
 const { buildConfig, DEFAULT_PORTS } = require('./streams/go2rtc-config');
 const { parseCameras } = require('./finder/cctv-file');
+const { probeEncoders, encoderTemplate, transcodeSource, encoderList } = require('./streams/encoder-probe');
 const LOG_DIR = path.join(INSTALL_DIR, 'logs');
 // 연결 실패·운용 기록 (logs 폴더에만 남기고, 설정 화면의 "진단 정보 복사"로 문의 때 받는다)
 const { createDiag } = require('./diagnostics/diag');
@@ -166,10 +167,19 @@ app.listen(PORT, async () => {
   console.log(`Server is running at http://localhost:${PORT}`);
   // cctv.txt 순서대로 카메라 영상을 go2rtc 설정에 넣고 go2rtc 를 켠다 (실패해도 웹 화면은 계속 동작)
   try {
+    // H.265 카메라를 PC 브라우저용 H.264 로 바꿀 변환기를 먼저 고른다 (go2rtc 설정에 넣어야 해서 go2rtc 시작 전에)
+    // 변환본(s{k}_h264)은 보는 사람이 있고 원본/서브가 코덱 때문에 안 될 때만 go2rtc 가 실행한다
+    const ffmpegPath = path.join(INSTALL_DIR, 'ffmpeg', 'bin', 'cctvgo-ffmpeg.exe');
+    const encoder = await probeEncoders({ ffmpegPath, encoders: encoderList(process.env.CCTVGO_ENCODERS) }).catch(() => null);
+    diag.event('encoder', { encoder: encoder || '없음' });
+    console.log(`[STREAM] H.265 변환기: ${encoder || '없음 (PC 브라우저에서 H.265 카메라는 안내만 표시)'}`);
+    if (encoder) streams.setTranscodeSource(transcodeSource);
+
     const text = fs.existsSync(CCTV_CONFIG_PATH) ? fs.readFileSync(CCTV_CONFIG_PATH, 'utf8') : '';
     const initial = streams.initialStreams(parseCameras(text));
     await go2rtc.start(buildConfig({
       apiPort: DEFAULT_PORTS.api, rtspPort: DEFAULT_PORTS.rtsp, webrtcPort: DEFAULT_PORTS.webrtc, ...GO2RTC_AUTH, streams: initial,
+      ffmpeg: encoder ? { bin: ffmpegPath, h264: encoderTemplate(encoder) } : null,
     }));
   } catch (error) {
     console.error('Stream start failed:', error.message);

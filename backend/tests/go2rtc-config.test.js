@@ -38,3 +38,10 @@ test('스트림이 없으면 streams: {} 를 쓴다', () => {
 test('streamNames: 원본, 서브, PC 변환본 이름', () => {
     assert.deepEqual(streamNames(12), { main: 's12', sub: 's12_sub', h264: 's12_h264' });
 });
+
+test('변환기가 있으면 ffmpeg 경로와 h264 템플릿을 넣는다 (없으면 ffmpeg 항목 없음)', () => {
+    const bin = 'C:/Program Files/CCTVGO/ffmpeg/bin/cctvgo-ffmpeg.exe';
+    const y = buildConfig({ ...base, streams: {}, ffmpeg: { bin, h264: '-c:v h264_qsv -b:v 4M' } });
+    assert.ok(y.includes(`ffmpeg:\n  bin: ${JSON.stringify(bin)}\n  h264: "-c:v h264_qsv -b:v 4M"\n`));
+    assert.doesNotMatch(buildConfig({ ...base, streams: {} }), /ffmpeg:/);
+});
