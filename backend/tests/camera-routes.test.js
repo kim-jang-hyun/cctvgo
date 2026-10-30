@@ -22,7 +22,7 @@ function fakeStreams() {
         async add(url) { calls.push(['add', url]); if (this.gate) await this.gate; if (this.fail) throw new Error('x'); return 9; },
         async restart(oldUrl, url) { calls.push(['restart', oldUrl, url]); if (this.fail) throw new Error('x'); },
         async remove(url) { calls.push(['remove', url]); if (this.fail) throw new Error('x'); },
-        streamUrls(urls) { return urls.map((u, i) => `/hls/stream${i + 7}/stream${i + 7}.m3u8`); },
+        streamIds(urls) { return urls.map((u, i) => (i === 1 ? null : i + 7)); },
     };
 }
 
@@ -76,14 +76,14 @@ test('옛 /api/finder/cameras, /api/finder/save 는 없다', async () => {
     } finally { await app.close(); }
 });
 
-test('get-channel-list: 이름 없는 줄은 카메라 N, url 은 streams.streamUrls 값', async () => {
+test('get-channel-list: 이름 없는 줄은 카메라 N, stream 은 streams.streamIds 값 (영상 주소 대신 카메라 번호)', async () => {
     const app = await startApp({ cctvText: 'rtsp://a:b@192.168.0.5:554/x, 거실\r\nrtsp://a:b@192.168.0.6:554/y' });
     try {
         const body = await (await app.call('GET', '/api/get-channel-list')).json();
         assert.equal(body.status, 'success');
         assert.deepEqual(body.channels, [
-            { name: '거실', url: '/hls/stream7/stream7.m3u8' },
-            { name: '카메라 2', url: '/hls/stream8/stream8.m3u8' },
+            { name: '거실', stream: 7 },
+            { name: '카메라 2', stream: null },
         ]);
     } finally { await app.close(); }
 });

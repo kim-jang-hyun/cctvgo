@@ -75,8 +75,9 @@ function registerCameraRoutes(app, { authMiddleware, cctvPath, streams, shared }
     app.get('/api/get-channel-list', authMiddleware, (req, res) => {
         try {
             const cameras = readCameras();
-            const urls = streams.streamUrls(cameras.map(c => c.url));
-            const channels = cameras.map((c, i) => ({ name: c.name || `카메라 ${c.index + 1}`, url: urls[i] }));
+            // 영상 주소 대신 카메라 번호(stream)를 준다. 화면은 이 번호로 /api/live/:k/offer 에 연결한다
+            const ids = streams.streamIds(cameras.map(c => c.url));
+            const channels = cameras.map((c, i) => ({ name: c.name || `카메라 ${c.index + 1}`, stream: ids[i] }));
             res.json({ status: 'success', channels });
         } catch (error) {
             console.error('Channel list failed:', error.message);
