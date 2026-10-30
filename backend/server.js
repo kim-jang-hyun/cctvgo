@@ -30,7 +30,7 @@ const path = require('path');
 const { createPasswordStore } = require('./settings/password-store');
 
 let BASE_DIR;
-let HLS_STATIC_PATH;
+let INSTALL_DIR;   // go2rtc 폴더와 logs 폴더가 있는 곳
 let FRONTEND_DIST_STATIC_PATH;
 
 if (process.pkg) {
@@ -38,21 +38,19 @@ if (process.pkg) {
     // 실행 파일이 위치한 디렉토리 (예: C:\cctvgo\package)
     const EXEC_PATH = path.dirname(process.execPath);
     BASE_DIR = EXEC_PATH;
-    HLS_STATIC_PATH = path.join(BASE_DIR, 'hls');
+    INSTALL_DIR = BASE_DIR;
     FRONTEND_DIST_STATIC_PATH = path.join(BASE_DIR, 'frontend/dist');
 
     console.log(`[INFO] PKG Environment Detected. Base Path: ${BASE_DIR}`);
-    console.log(`[HLS PATH] PKG 환경: ${HLS_STATIC_PATH}`);
     console.log(`[FRONTEND_DIST_STATIC_PATH] PKG 환경: ${FRONTEND_DIST_STATIC_PATH}`);
 } else {
     // process.pkg가 없으면 -> 개발 환경 (일반 Node 실행)
     // __dirname은 현재 server.js 파일이 있는 디렉토리 (C:\cctvgo\backend)
     BASE_DIR = __dirname;
-    HLS_STATIC_PATH = path.join(BASE_DIR, '..', 'hls');
+    INSTALL_DIR = path.join(BASE_DIR, '..');
     FRONTEND_DIST_STATIC_PATH = path.join(BASE_DIR, '..', 'frontend/dist');
 
     console.log(`[INFO] Development Environment Detected. Base Path: ${BASE_DIR}`);
-    console.log(`[HLS PATH] 개발 환경: ${HLS_STATIC_PATH}`);
     console.log(`[FRONTEND_DIST_STATIC_PATH] 개발 환경: ${FRONTEND_DIST_STATIC_PATH}`);
 }
 
@@ -79,12 +77,22 @@ const CONFIG_PATH = path.join(BASE_DIR, 'config.json');
 const passwordStore = createPasswordStore(CONFIG_PATH);
 const CCTV_CONFIG_PATH = path.join(BASE_DIR, 'cctv.txt');
 
-// 카메라 영상(run_single_stream.bat → cctvgo-ffmpeg)은 서비스가 켜고 끈다.
-// 배치 파일과 hls 폴더는 PKG 환경에서는 실행 파일 옆, 개발 환경에서는 저장소 루트에 있다
-const STREAM_SCRIPT_DIR = path.dirname(HLS_STATIC_PATH);
+// 카메라 영상은 서비스가 go2rtc(자식 프로세스)로 켜고 끈다. 영상은 go2rtc WebRTC 포트로 브라우저에 직접 간다.
+// go2rtc 관리 API 는 127.0.0.1 에만 열고, 시작할 때마다 새로 만든 비밀번호로만 쓴다
+const crypto = require('crypto');
 const { StreamManager } = require('./streams/stream-manager');
+const { Go2rtcApi } = require('./streams/go2rtc-api');
+const { Go2rtcProcess } = require('./streams/go2rtc-process');
+const { buildConfig, DEFAULT_PORTS } = require('./streams/go2rtc-config');
 const { parseCameras } = require('./finder/cctv-file');
-const streams = new StreamManager({ scriptDir: STREAM_SCRIPT_DIR });
+const LOG_DIR = path.join(INSTALL_DIR, 'logs');
+const GO2RTC_AUTH = { username: 'cctvgo', password: crypto.randomBytes(24).toString('hex') };
+const go2rtcApi = new Go2rtcApi({ port: DEFAULT_PORTS.api, ...GO2RTC_AUTH });
+const streams = new StreamManager({ api: go2rtcApi });
+const go2rtc = new Go2rtcProcess({ installDir: INSTALL_DIR, logDir: LOG_DIR, onRestart: () => streams.resync() });
+// 서비스가 끝나면 go2rtc 도 끈다 (남겨 두면 다음 시작 때 포트가 겹친다)
+process.on('exit', () => go2rtc.stop());
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => process.exit(0));
 
 // 로그인 처리 API
 app.post('/login', (req, res) => {
@@ -104,6 +112,10 @@ app.post('/login', (req, res) => {
 // 카메라 주소 찾기 + 카메라 관리 API (영상 화면용 /api/get-channel-list 포함)
 const { registerFinderRoutes } = require('./finder/routes');
 registerFinderRoutes(app, { authMiddleware, baseDir: BASE_DIR, cctvPath: CCTV_CONFIG_PATH, streams });
+
+// 영상 연결(WebRTC 시그널링) API
+const { registerLiveRoutes } = require('./streams/live-routes');
+registerLiveRoutes(app, { authMiddleware, streams, api: go2rtcApi });
 
 // 설정 화면 API (비밀번호 변경)
 const { registerSettingsRoutes } = require('./settings/routes');
@@ -126,9 +138,6 @@ function authMiddleware(req, res, next) {
 }
 
 
-// HLS 정적 파일 제공 (인증 필요)
-app.use('/hls', authMiddleware, express.static(HLS_STATIC_PATH));
-
 // 정적 파일 제공 - /login 경로는 제외하고 인증 미들웨어 적용
 app.use((req, res, next) => {
   if (req.path === '/login' || req.path.startsWith('/login/')) {
@@ -148,10 +157,13 @@ app.get('*', authMiddleware, (req, res) => {
 
 app.listen(PORT, async () => {
   console.log(`Server is running at http://localhost:${PORT}`);
-  // cctv.txt 순서대로 카메라 영상을 켠다 (실패해도 웹 화면은 계속 동작)
+  // cctv.txt 순서대로 카메라 영상을 go2rtc 설정에 넣고 go2rtc 를 켠다 (실패해도 웹 화면은 계속 동작)
   try {
     const text = fs.existsSync(CCTV_CONFIG_PATH) ? fs.readFileSync(CCTV_CONFIG_PATH, 'utf8') : '';
-    await streams.startAll(parseCameras(text).map(c => c.url));
+    const initial = streams.initialStreams(parseCameras(text));
+    await go2rtc.start(buildConfig({
+      apiPort: DEFAULT_PORTS.api, rtspPort: DEFAULT_PORTS.rtsp, webrtcPort: DEFAULT_PORTS.webrtc, ...GO2RTC_AUTH, streams: initial,
+    }));
   } catch (error) {
     console.error('Stream start failed:', error.message);
   }
