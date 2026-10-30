@@ -68,15 +68,17 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0utils\update_cloudflar
 start /b "Cloudflare" cmd /c "%~dp0cloudflare\start_tunnel.bat >> %~dp0logs\tunnel.log 2>&1"
 timeout /t 3 > nul
 
-:: Windows Firewall: allow inbound to this folder's go2rtc.exe (asks UAC once, only if the rule is missing).
-:: If the user declines, CCTVGO still runs; the result goes to logsirewall.log.
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0utils\ensure_firewall.ps1" -InstallDir "%~dp0." -LogDir "%LOG_DIR%" >nul 2>&1
-
 :: CCTVGO Service 실행
 echo [2/2] CCTVGO 메인 서비스 기동 중 (카메라 영상 포함)...
 :: start /b를 사용하여 새 창 없이 실행하고 로그는 별도 저장
 start /b "CCTVGO_Service" cmd /c "%~dp0cctvgo-service.exe >> %~dp0logs\service.log 2>&1"
 timeout /t 3 > nul
+
+:: Windows Firewall: allow inbound to this folder's go2rtc.exe (asks UAC once, only if the rule is missing).
+:: Runs in the background after the service starts, so an unanswered prompt never blocks video after a reboot.
+:: If the user declines, CCTVGO still runs and we do not ask again (see logs\firewall.log, logs\firewall.declined).
+start "" /b powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0utils\ensure_firewall.ps1" -InstallDir "%~dp0." -LogDir "%LOG_DIR%" >nul 2>&1
+
 
 echo.
 echo -----------------------------------------------------
