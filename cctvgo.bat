@@ -60,6 +60,9 @@ start /b "CCTVGO_NoSleep" powershell -NoProfile -ExecutionPolicy Bypass -File "%
 
 :: Cloudflare Tunnel 실행
 echo [1/2] Cloudflare Tunnel 보안 연결 중...
+:: Self-update cloudflared before starting the tunnel. On any failure the current exe is kept
+:: and the tunnel starts as before (see utils\update_cloudflared.ps1, max ~1.5 min).
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0utils\update_cloudflared.ps1" "%~dp0cloudflare\cloudflared.exe" >> "%LOG_DIR%\tunnel.log" 2>&1
 :: start /b를 사용하여 새 창 없이 실행하고 로그는 별도 저장
 start /b "Cloudflare" cmd /c "%~dp0cloudflare\start_tunnel.bat >> %~dp0logs\tunnel.log 2>&1"
 timeout /t 3 > nul

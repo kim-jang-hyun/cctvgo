@@ -10,6 +10,10 @@ set PORT=8085
 
 echo [INFO] Received Customer ID: %CUSTOMER_ID%
 
+:: Update the source cloudflared.exe so new packages ship the latest version.
+:: On any failure the current exe is kept (see utils\update_cloudflared.ps1).
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\utils\update_cloudflared.ps1" "%~dp0cloudflared.exe"
+
 :: 변수 설정
 set TUNNEL_NAME=tunnel_%CUSTOMER_ID%
 set HOSTNAME=%CUSTOMER_ID%.%DOMAIN%
