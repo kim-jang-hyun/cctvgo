@@ -18,8 +18,9 @@ set ZIP_FILE=%OUTPUT_DIR%.zip
 
 
 :: 1. 기존 터널 존재 여부 확인 및 삭제
-for /f "tokens=1" %%a in ('cloudflared.exe tunnel list ^| findstr %TUNNEL_NAME%') do (
-    set EXISTING_TUNNEL_ID=%%a
+:: Match the NAME column exactly (findstr matched substrings: tunnel_use -> tunnel_user9)
+for /f "tokens=1,2" %%a in ('cloudflared.exe tunnel list') do (
+    if "%%b"=="%TUNNEL_NAME%" set EXISTING_TUNNEL_ID=%%a
 )
 
 :: 2. 기존 DNS route 삭제 시도
@@ -32,8 +33,8 @@ echo 🚀 터널 생성 중: %TUNNEL_NAME%
 cloudflared.exe tunnel create %TUNNEL_NAME%
 
 :: 4. 터널 ID 추출
-for /f "tokens=1" %%a in ('cloudflared.exe tunnel list ^| findstr %TUNNEL_NAME%') do (
-    set TUNNEL_ID=%%a
+for /f "tokens=1,2" %%a in ('cloudflared.exe tunnel list') do (
+    if "%%b"=="%TUNNEL_NAME%" set TUNNEL_ID=%%a
 )
 
 :: 5. DNS 연결
