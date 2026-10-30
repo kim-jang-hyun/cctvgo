@@ -10,7 +10,7 @@
   },
   "keywords": [],
   "author": "김장현",
-  "description": "RTSP → HLS 변환 후 웹으로 CCTV 영상 스트리밍",
+  "description": "go2rtc(WebRTC)로 CCTV 영상을 브라우저에 직접 전송",
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^17.2.0",

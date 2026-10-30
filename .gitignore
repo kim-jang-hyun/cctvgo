@@ -9,7 +9,6 @@
 /frontend/node_modules
 /frontend/dist
 
-/hls
 /go2rtc/go2rtc.yaml
 /logs
 

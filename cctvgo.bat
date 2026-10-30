@@ -33,6 +33,7 @@ echo [%date% %time%] 시스템 재시작 (기존 프로세스 정리) >> %MAIN_L
 
 :: /F: 강제 종료, /IM: 이미지 이름 지정, /T: 자식 프로세스까지 종료
 taskkill /F /IM cctvgo-ffmpeg.exe /T >nul 2>&1
+taskkill /F /IM go2rtc.exe /T >nul 2>&1
 taskkill /F /IM cloudflared.exe /T >nul 2>&1
 taskkill /F /IM cctvgo-service.exe /T >nul 2>&1
 taskkill /F /FI "WINDOWTITLE eq CCTVGO_NoSleep*" /T >nul 2>&1
@@ -55,8 +56,8 @@ echo [0/3] 절전 모드 방지 설정 중...
 :: start /b로 이 창과 같은 콘솔에서 실행해, 이 창을 닫으면 함께 종료되게 한다
 start /b "CCTVGO_NoSleep" powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0utils\prevent_sleep.ps1" "%LOG_DIR%\nosleep.heartbeat" >nul 2>&1
 
-:: 카메라 영상(FFmpeg)은 CCTVGO 서비스가 cctv.txt 를 읽어 직접 켜고 끈다
-:: (웹 화면에서 카메라를 추가/수정/삭제하면 재시작 없이 그 카메라 영상만 바뀐다)
+:: Camera video: the CCTVGO service runs go2rtc (go2rtc\go2rtc.exe) from cctv.txt.
+:: Video goes from go2rtc directly to the viewer's browser (WebRTC), not through Cloudflare.
 
 :: Cloudflare Tunnel 실행
 echo [1/2] Cloudflare Tunnel 보안 연결 중...
@@ -66,6 +67,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0utils\update_cloudflar
 :: start /b를 사용하여 새 창 없이 실행하고 로그는 별도 저장
 start /b "Cloudflare" cmd /c "%~dp0cloudflare\start_tunnel.bat >> %~dp0logs\tunnel.log 2>&1"
 timeout /t 3 > nul
+
+:: Windows Firewall: allow inbound to this folder's go2rtc.exe (asks UAC once, only if the rule is missing).
+:: If the user declines, CCTVGO still runs; the result goes to logsirewall.log.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0utils\ensure_firewall.ps1" -InstallDir "%~dp0." -LogDir "%LOG_DIR%" >nul 2>&1
 
 :: CCTVGO Service 실행
 echo [2/2] CCTVGO 메인 서비스 기동 중 (카메라 영상 포함)...
@@ -91,24 +96,25 @@ echo.
 echo [프로세스 명]          [상태]
 echo -----------------------------------------------------
 
-:: ffmpeg 체크 (여러 개일 수 있으므로 개수 표시)
-:: 먼저 개수를 체크 (tasklist의 결과를 직접 변수에 담음)
-set "FF_COUNT=0"
-for /f %%c in ('tasklist /fi "imagename eq cctvgo-ffmpeg.exe" /nh ^| find /c "cctvgo-ffmpeg.exe"') do set "FF_COUNT=%%c"
+:: go2rtc (video server) check
+set "GO_COUNT=0"
+for /f %%c in ('tasklist /fi "imagename eq go2rtc.exe" /nh ^| find /c "go2rtc.exe"') do set "GO_COUNT=%%c"
 
 :: 등록된 카메라 수 (cctv.txt 에서 빈 줄과 # 주석을 뺀 줄 수)
 set "CAM_COUNT=0"
 for /f "delims=" %%a in ('powershell -NoProfile -Command "@(Get-Content -LiteralPath '%~dp0cctv.txt' -ErrorAction SilentlyContinue | Where-Object { $_.Trim() -ne '' -and -not $_.Trim().StartsWith('#') }).Count"') do set "CAM_COUNT=%%a"
 
 :: 개수에 따라 출력 (카메라가 0대면 영상이 없는 것이 정상)
-if !CAM_COUNT! equ 0 (
-    echo   - FFmpeg Streams     : 등록된 카메라 없음 - 웹 화면 설정에서 추가
-) else if !FF_COUNT! gtr 0 (
-    echo   - FFmpeg Streams     : 정상 작동 중 ^(!FF_COUNT!/!CAM_COUNT!개^)
+if !GO_COUNT! gtr 0 (
+    if !CAM_COUNT! equ 0 (
+        echo   - 영상 서버 go2rtc   : 정상 작동 중 ^(등록된 카메라 없음 - 웹 화면 설정에서 추가^)
+    ) else (
+        echo   - 영상 서버 go2rtc   : 정상 작동 중 ^(카메라 !CAM_COUNT!대^)
+    )
 ) else if !FAST_CHECKS! gtr 0 (
-    echo   - FFmpeg Streams     : 시작 중...
+    echo   - 영상 서버 go2rtc   : 시작 중...
 ) else (
-    echo   - FFmpeg Streams     : 오류: 작동 중지 ^^!^^!^^!
+    echo   - 영상 서버 go2rtc   : 오류: 작동 중지 ^^!^^!^^!
 )
 
 :: Cloudflare 체크
