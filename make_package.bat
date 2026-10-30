@@ -82,13 +82,14 @@ echo ---------------------------------------------
 echo [INFO] Creating Cloudflare Tunnel
 
 :: **변경:** CUSTOMER_ID 입력을 make_package.bat에서 받습니다.
-:: 고객 ID 는 접속 주소(고객ID.cctvgo.app)가 된다. 브라우저는 주소를 소문자로 바꿔 접속하는데
-:: 터널 설정(config.yml)의 hostname 은 대소문자를 구분하므로, 대문자는 소문자로 바꾸고 주소에 쓸 수 없는 글자는 다시 묻는다.
+:: Customer ID becomes the hostname (ID.cctvgo.app). Browsers send it in lowercase,
+:: but config.yml hostname is case-sensitive, so lowercase it and reject invalid chars.
+:: (Keep comments here ASCII: long Korean lines make cmd misread this UTF-8 file.)
 :ASK_CUSTOMER_ID
 set "CUSTOMER_ID="
 set /p "CUSTOMER_ID=고객 ID (영문 소문자/숫자/-, 예: user1): "
 if not defined CUSTOMER_ID goto ASK_CUSTOMER_ID
-:: set 의 문자열 치환은 대소문자를 구분하지 않으므로 a=a 치환이 대문자 A 를 a 로 바꾼다
+:: set substitution is case-insensitive, so replacing a with a turns A into a
 for %%c in (a b c d e f g h i j k l m n o p q r s t u v w x y z) do set "CUSTOMER_ID=!CUSTOMER_ID:%%c=%%c!"
 set "ID_REST=!CUSTOMER_ID!"
 for %%c in (a b c d e f g h i j k l m n o p q r s t u v w x y z 0 1 2 3 4 5 6 7 8 9 -) do if defined ID_REST set "ID_REST=!ID_REST:%%c=!"
@@ -139,7 +140,7 @@ exit /b 1
 
 :: 12-1. utils 폴더 복사
 if exist "%ROOT_DIR%utils" (
-:: 개발용 샘플 동영상(*.mp4)은 고객 패키지에 넣지 않는다
+:: Do not ship sample videos (*.mp4) to customers
 robocopy "%ROOT_DIR%utils" "%PACKAGE_DIR%\utils" /E /XF *.mp4 /NFL /NDL /NJH /NJS /NP >nul
 echo [INFO] Copied utils folder ^(*.mp4 제외^)
 ) else (
