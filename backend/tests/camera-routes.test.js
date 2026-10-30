@@ -22,6 +22,7 @@ function fakeStreams() {
         async add(url, subUrl) { calls.push(subUrl ? ['add', url, subUrl] : ['add', url]); if (this.gate) await this.gate; if (this.fail) throw new Error('x'); return 9; },
         async restart(oldUrl, url, subUrl) { calls.push(subUrl ? ['restart', oldUrl, url, subUrl] : ['restart', oldUrl, url]); if (this.fail) throw new Error('x'); },
         async remove(url) { calls.push(['remove', url]); if (this.fail) throw new Error('x'); },
+        epoch: 'E9',
         streamIds(urls) { return urls.map((u, i) => (i === 1 ? null : i + 7)); },
     };
 }
@@ -81,6 +82,7 @@ test('get-channel-list: 이름 없는 줄은 카메라 N, stream 은 streams.str
     try {
         const body = await (await app.call('GET', '/api/get-channel-list')).json();
         assert.equal(body.status, 'success');
+        assert.equal(body.epoch, 'E9');
         assert.deepEqual(body.channels, [
             { name: '거실', stream: 7 },
             { name: '카메라 2', stream: null },

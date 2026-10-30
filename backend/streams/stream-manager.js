@@ -1,4 +1,5 @@
 'use strict';
+const crypto = require('crypto');
 const { streamNames } = require('./go2rtc-config');
 
 /**
@@ -18,6 +19,9 @@ class StreamManager {
         this.entries = [];
         this.maxUsed = 0;
         this.queue = Promise.resolve();
+        // 서비스가 시작할 때마다 카메라 번호를 1..N 으로 다시 매긴다. 열린 화면이 옛 번호로 다른 카메라에 붙지 않도록
+        // 채널 목록과 연결 요청에 이 값을 함께 쓰고, 다르면 화면이 목록을 다시 받는다
+        this.epoch = crypto.randomBytes(6).toString('hex');
     }
 
     _run(task) {

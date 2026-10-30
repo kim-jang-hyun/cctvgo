@@ -94,6 +94,11 @@ const STATUS_TEXT = {
 // --- 상태 ---
 const cameraList = ref(null);
 const error = ref(null);
+let epoch = '';   // 채널 목록의 번호 체계 (서비스가 다시 시작하면 바뀐다)
+let keepAliveTimer = null;
+let reloading = null;
+// 영상만 보고 있으면 HTTP 요청이 없어 로그인 세션(1시간)이 끝난다. 화면을 켜 두는 동안 주기적으로 목록을 받아 세션을 유지한다
+const KEEPALIVE_MS = 15 * 60 * 1000;
 
 const isMobile = ref(false);
 const selectedMobileIndex = ref(0);
@@ -141,6 +146,7 @@ const getCameraList = async () => {
     }
     console.log('채널 리스트:', data.channels);
     channelList = data.channels || [];
+    epoch = data.epoch || '';
   } catch (err) {
     console.error('API call error:', err.message);
     error.value = err.message;
@@ -180,7 +186,7 @@ function initMobilePlayer() {
   }
   const cam = currentMobileCamera.value;
   if (!mobileVideoRef.value || cam?.stream == null) return;
-  mobileClose = connectStream(mobileVideoRef.value, cam.stream, { onState: watchState(cam.id) });
+  mobileClose = connectStream(mobileVideoRef.value, cam.stream, { epoch, onState: watchState(cam.id), onStale: reloadCameras });
 }
 
 function closeDesktopPlayers() {
@@ -203,7 +209,7 @@ function initPlayers() {
   cameraList.value.forEach((cam, index) => {
     const video = videoElements[index];
     if (!video || cam.stream == null) return;
-    closers.push(connectStream(video, cam.stream, { onState: watchState(cam.id) }));
+    closers.push(connectStream(video, cam.stream, { epoch, onState: watchState(cam.id), onStale: reloadCameras }));
   });
 }
 
@@ -225,6 +231,32 @@ watch(isMobile, () => {
   nextTick(() => initPlayers());
 });
 
+// 서비스가 다시 시작했거나 카메라 목록이 바뀌었으면 목록을 다시 받아 칸을 다시 연결한다 (여러 칸이 동시에 알려도 한 번만)
+function reloadCameras() {
+  if (reloading) return reloading;
+  reloading = (async () => {
+    closeDesktopPlayers();
+    if (mobileClose) {
+      mobileClose();
+      mobileClose = null;
+    }
+    const channels = await getCameraList();
+    initCameraList(channels);
+    await nextTick();
+    initPlayers();
+  })().finally(() => { reloading = null; });
+  return reloading;
+}
+
+async function keepAlive() {
+  try {
+    const res = await fetch('/api/get-channel-list');
+    if (res.redirected) return;   // 이미 세션이 끝났으면 다음 연결 시도에서 로그인 화면으로 간다
+    const data = await res.json();
+    if (data.epoch && data.epoch !== epoch) reloadCameras();
+  } catch (e) { /* 다음 주기에 다시 */ }
+}
+
 // --- lifecycle ---
 onMounted(async () => {
   checkMobile();
@@ -236,9 +268,11 @@ onMounted(async () => {
 
   await nextTick();
   initPlayers();
+  keepAliveTimer = setInterval(keepAlive, KEEPALIVE_MS);
 });
 
 onUnmounted(() => {
+  clearInterval(keepAliveTimer);
   mobileQuery.removeEventListener('change', checkMobile);
   window.removeEventListener('resize', checkMobile);
   closeDesktopPlayers();

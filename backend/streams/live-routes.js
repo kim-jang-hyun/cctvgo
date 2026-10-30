@@ -20,6 +20,10 @@ function registerLiveRoutes(app, { authMiddleware, streams, api, diag = { connec
         const sdp = typeof req.body === 'string' ? req.body : '';
         if (!sdp.trim()) return res.status(400).json({ status: 'error', message: '연결 정보가 없습니다.' });
 
+        // 서비스가 다시 시작해 카메라 번호가 바뀌었으면, 옛 번호로 다른 카메라에 붙지 않게 화면이 목록을 다시 받게 한다
+        if (req.query.epoch !== streams.epoch) {
+            return res.status(409).json({ status: 'error', reason: 'stale', message: '카메라 목록이 바뀌었습니다.' });
+        }
         const k = Number(req.params.k);
         const h265 = req.query.h265 === '1';
         const started = Date.now();

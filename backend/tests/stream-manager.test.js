@@ -153,3 +153,11 @@ test('currentStreams: 시작 뒤 추가·삭제·수정이 반영된 지금의 �
     await mgr.restart(B, B2, null);
     assert.deepEqual(mgr.currentStreams(), { cctvgo_k2: B2, cctvgo_k3: C });
 });
+
+test('epoch: 서비스가 시작할 때마다 새 값 (번호 체계가 바뀌었음을 화면이 알 수 있게)', () => {
+    const a = setup().mgr;
+    const b = setup().mgr;
+    assert.equal(typeof a.epoch, 'string');
+    assert.ok(a.epoch.length >= 8);
+    assert.notEqual(a.epoch, b.epoch);
+});

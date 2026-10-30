@@ -87,7 +87,7 @@ function registerCameraRoutes(app, { authMiddleware, cctvPath, streams, shared }
             // 영상 주소 대신 카메라 번호(stream)를 준다. 화면은 이 번호로 /api/live/:k/offer 에 연결한다
             const ids = streams.streamIds(cameras.map(c => c.url));
             const channels = cameras.map((c, i) => ({ name: c.name || `카메라 ${c.index + 1}`, stream: ids[i] }));
-            res.json({ status: 'success', channels });
+            res.json({ status: 'success', epoch: streams.epoch, channels });
         } catch (error) {
             console.error('Channel list failed:', error.message);
             res.status(500).json({ status: 'error', message: 'cctv.txt 를 읽을 수 없습니다.' });
