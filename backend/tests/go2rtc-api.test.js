@@ -87,3 +87,15 @@ test('ping: 응답하면 true, 꺼져 있으면 false', async () => {
     } finally { await s.close(); }
     assert.equal(await new Go2rtcApi({ port: await getClosedPort(), username: 'u', password: 'p' }).ping(), false);
 });
+
+test('waitReady: go2rtc 가 응답할 때까지 기다리고, 끝내 응답이 없으면 false', async () => {
+    let up = 0;
+    const s = await fakeServer((r, res) => { res.statusCode = ++up >= 3 ? 200 : 503; res.end('{}'); });
+    try {
+        const api = new Go2rtcApi({ port: s.port, username: 'u', password: 'p' });
+        assert.equal(await api.waitReady({ tries: 5, intervalMs: 10 }), true);
+        assert.equal(s.requests.length, 3);
+    } finally { await s.close(); }
+    const dead = new Go2rtcApi({ port: await getClosedPort(), username: 'u', password: 'p' });
+    assert.equal(await dead.waitReady({ tries: 3, intervalMs: 10 }), false);
+});

@@ -95,10 +95,22 @@ const diag = createDiag({ logDir: LOG_DIR, version: require('./package.json').ve
 const GO2RTC_AUTH = { username: 'cctvgo', password: crypto.randomBytes(24).toString('hex') };
 const go2rtcApi = new Go2rtcApi({ port: DEFAULT_PORTS.api, ...GO2RTC_AUTH });
 const streams = new StreamManager({ api: go2rtcApi });
-const go2rtc = new Go2rtcProcess({ installDir: INSTALL_DIR, logDir: LOG_DIR, onRestart: () => streams.resync(), event: diag.event });
+// go2rtc 설정: 시작 때와, go2rtc 가 죽었다 다시 뜰 때(그 사이 추가·수정·삭제한 카메라 반영) 같은 방식으로 만든다
+const FFMPEG_PATH = path.join(INSTALL_DIR, 'ffmpeg', 'bin', 'cctvgo-ffmpeg.exe');
+let selectedEncoder = null;
+const makeGo2rtcConfig = () => buildConfig({
+  apiPort: DEFAULT_PORTS.api, rtspPort: DEFAULT_PORTS.rtsp, webrtcPort: DEFAULT_PORTS.webrtc, ...GO2RTC_AUTH,
+  streams: streams.currentStreams(),
+  ffmpeg: selectedEncoder ? { bin: FFMPEG_PATH, h264: encoderTemplate(selectedEncoder) } : null,
+});
+const go2rtc = new Go2rtcProcess({
+  installDir: INSTALL_DIR, logDir: LOG_DIR, event: diag.event, makeConfig: makeGo2rtcConfig,
+  // 다시 뜬 go2rtc 가 API 를 열 때까지 기다린 뒤 다시 넣는다 (바로 보내면 연결이 거부된다)
+  onRestart: async () => { await go2rtcApi.waitReady(); await streams.resync(); },
+});
 // 서비스가 끝나면 go2rtc 도 끈다 (남겨 두면 다음 시작 때 포트가 겹친다)
 process.on('exit', () => go2rtc.stop());
-for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => process.exit(0));
+for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGBREAK']) process.on(sig, () => process.exit(0));
 
 // 로그인 처리 API
 app.post('/login', (req, res) => {
@@ -163,31 +175,34 @@ app.get('*', authMiddleware, (req, res) => {
   res.sendFile(path.join(FRONTEND_DIST_STATIC_PATH, 'index.html'));
 });
 
-app.listen(PORT, async () => {
-  console.log(`Server is running at http://localhost:${PORT}`);
-  // cctv.txt 순서대로 카메라 영상을 go2rtc 설정에 넣고 go2rtc 를 켠다 (실패해도 웹 화면은 계속 동작)
+/**
+ * 영상 준비가 끝난 뒤에 요청을 받는다. 준비 중에 채널 목록을 받으면 모든 칸이 빈 칸이 되고,
+ * 준비 중에 추가한 카메라는 go2rtc 에 들어가지 않기 때문이다. 영상 준비가 실패해도 웹 화면은 연다.
+ */
+async function startStreams() {
   try {
     // H.265 카메라를 PC 브라우저용 H.264 로 바꿀 변환기를 먼저 고른다 (go2rtc 설정에 넣어야 해서 go2rtc 시작 전에)
-    // 변환본(s{k}_h264)은 보는 사람이 있고 원본/서브가 코덱 때문에 안 될 때만 go2rtc 가 실행한다
-    const ffmpegPath = path.join(INSTALL_DIR, 'ffmpeg', 'bin', 'cctvgo-ffmpeg.exe');
-    const encoder = await probeEncoders({ ffmpegPath, encoders: encoderList(process.env.CCTVGO_ENCODERS) }).catch(() => null);
-    diag.event('encoder', { encoder: encoder || '없음' });
-    console.log(`[STREAM] H.265 변환기: ${encoder || '없음 (PC 브라우저에서 H.265 카메라는 안내만 표시)'}`);
-    if (encoder) streams.setTranscodeSource(transcodeSource);
+    // 변환본은 보는 사람이 있고 원본/서브가 코덱 때문에 안 될 때만 go2rtc 가 실행한다
+    selectedEncoder = await probeEncoders({ ffmpegPath: FFMPEG_PATH, encoders: encoderList(process.env.CCTVGO_ENCODERS) }).catch(() => null);
+    diag.event('encoder', { encoder: selectedEncoder || '없음' });
+    console.log(`[STREAM] H.265 변환기: ${selectedEncoder || '없음 (PC 브라우저에서 H.265 카메라는 안내만 표시)'}`);
+    if (selectedEncoder) streams.setTranscodeSource(transcodeSource);
 
     const text = fs.existsSync(CCTV_CONFIG_PATH) ? fs.readFileSync(CCTV_CONFIG_PATH, 'utf8') : '';
-    const initial = streams.initialStreams(parseCameras(text));
-    await go2rtc.start(buildConfig({
-      apiPort: DEFAULT_PORTS.api, rtspPort: DEFAULT_PORTS.rtsp, webrtcPort: DEFAULT_PORTS.webrtc, ...GO2RTC_AUTH, streams: initial,
-      ffmpeg: encoder ? { bin: ffmpegPath, h264: encoderTemplate(encoder) } : null,
-    }));
+    streams.initialStreams(parseCameras(text));
+    await go2rtc.start(makeGo2rtcConfig());
+    if (!(await go2rtcApi.waitReady())) console.error('[GO2RTC] API 응답 없음 (영상이 나오지 않을 수 있음)');
   } catch (error) {
     console.error('Stream start failed:', error.message);
   }
+}
+
+startStreams().then(() => app.listen(PORT, () => {
+  console.log(`Server is running at http://localhost:${PORT}`);
   // 환경 점검: 시작 후 한 번, 그 뒤 6시간마다 (실패해도 서비스에 영향 없음)
   const checkEnv = () => checkEnvironment({ installDir: INSTALL_DIR, stun: () => stunBinding() })
     .then(result => diag.env(result))
     .catch(error => console.error('Environment check failed:', error.message));
   checkEnv();
   setInterval(checkEnv, 6 * 60 * 60 * 1000).unref();
-});
+}));

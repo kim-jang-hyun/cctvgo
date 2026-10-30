@@ -143,3 +143,13 @@ test('로그에 카메라 주소(비밀번호)를 남기지 않는다', async ()
     assert.ok(logs.length > 0);
     assert.ok(logs.every(l => !l.includes('secret')));
 });
+
+test('currentStreams: 시작 뒤 추가·삭제·수정이 반영된 지금의 스트림 표 (go2rtc 를 다시 띄울 때 설정으로 쓴다)', async () => {
+    const { mgr } = setup();
+    mgr.initialStreams([{ url: A }, { url: B, subUrl: SUB_B }]);
+    await mgr.add(C);
+    await mgr.remove(A);
+    const B2 = 'rtsp://n:pw@192.168.0.2:554/y';
+    await mgr.restart(B, B2, null);
+    assert.deepEqual(mgr.currentStreams(), { cctvgo_k2: B2, cctvgo_k3: C });
+});

@@ -44,6 +44,15 @@ class Go2rtcApi {
         }
     }
 
+    /** go2rtc 가 막 시작했을 때 API 가 응답할 때까지 기다린다 (포트를 열기 전에 보낸 요청은 실패한다) */
+    async waitReady({ tries = 50, intervalMs = 200 } = {}) {
+        for (let i = 0; i < tries; i++) {
+            if (await this.ping()) return true;
+            await new Promise(r => setTimeout(r, intervalMs));
+        }
+        return false;
+    }
+
     async ping() {
         try {
             const res = await this._request('GET', '/api');

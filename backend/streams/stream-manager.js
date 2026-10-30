@@ -54,6 +54,13 @@ class StreamManager {
         return all;
     }
 
+    /** 지금의 스트림 표 (go2rtc 가 죽었다 다시 뜰 때 설정 파일로 쓴다. 시작 뒤 추가·수정·삭제가 반영돼 있다) */
+    currentStreams() {
+        const all = {};
+        for (const entry of this.entries) Object.assign(all, this._streamsOf(entry));
+        return all;
+    }
+
     /** 변환기 선택이 끝난 뒤 바꾼다. 적용은 resync() 로 한다 */
     setTranscodeSource(fn) {
         this.transcodeSource = fn;

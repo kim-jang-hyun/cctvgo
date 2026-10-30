@@ -2,10 +2,18 @@
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
+const readline = require('readline');
 
 const MAX_DELAY_MS = 30000;
 // 이만큼 살아 있었으면 정상 동작으로 보고 다시 띄우는 간격을 처음(1초)으로 돌린다
 const HEALTHY_MS = 60000;
+// go2rtc.log 는 계속 이어 쓰므로(7일 삭제 대상이 안 됨) 시작할 때 이 크기를 넘으면 go2rtc.old.log 로 돌린다
+const MAX_LOG_BYTES = 5 * 1024 * 1024;
+
+/** go2rtc 는 연결 오류 때 카메라 주소(아이디/비밀번호 포함)를 그대로 찍는다. 로그에 남기기 전에 가린다 */
+function maskSecrets(line) {
+    return String(line).replace(/([a-z][a-z0-9+.-]*:\/\/)[^\s/@"']*@/gi, '$1***@');
+}
 
 /**
  * go2rtc.exe 를 자식 프로세스로 실행하고 비정상 종료 시 다시 띄운다.
@@ -14,7 +22,7 @@ const HEALTHY_MS = 60000;
  */
 class Go2rtcProcess {
     constructor({
-        installDir, logDir, spawnImpl = spawn, procs = require('./processes'),
+        installDir, logDir, spawnImpl = spawn, procs = require('./processes'), makeConfig = null,
         delay = ms => new Promise(r => setTimeout(r, ms)), onRestart = () => {}, event = () => {},
         log = console.log, error = console.error,
     }) {
@@ -22,6 +30,7 @@ class Go2rtcProcess {
         this.logDir = logDir;
         this.spawnImpl = spawnImpl;
         this.procs = procs;
+        this.makeConfig = makeConfig;   // 다시 띄울 때 지금의 스트림 표로 설정을 새로 쓰기 위한 함수
         this.delay = delay;
         this.onRestart = onRestart;
         this.event = event;
@@ -48,24 +57,38 @@ class Go2rtcProcess {
         }
         fs.mkdirSync(this.dir, { recursive: true });
         fs.writeFileSync(this.configPath, configText, 'utf8');
+        this._rotateLog();
         this._spawn();
     }
 
-    _spawn() {
-        let logFd = 'ignore';
+    get logPath() { return path.join(this.logDir, 'go2rtc.log'); }
+
+    _rotateLog() {
         try {
-            fs.mkdirSync(this.logDir, { recursive: true });
-            logFd = fs.openSync(path.join(this.logDir, 'go2rtc.log'), 'a');
+            if (fs.existsSync(this.logPath) && fs.statSync(this.logPath).size > MAX_LOG_BYTES) {
+                fs.renameSync(this.logPath, path.join(this.logDir, 'go2rtc.old.log'));
+            }
         } catch (e) {
-            this.error(`[GO2RTC] 로그 파일 열기 실패: ${e.message}`);
+            this.error(`[GO2RTC] 로그 정리 실패: ${e.message}`);
         }
+    }
+
+    /** 자식의 출력을 줄 단위로 받아 비밀번호를 가린 뒤 로그 파일에 쓴다 */
+    _pipeLog(stream) {
+        if (!stream) return;
+        readline.createInterface({ input: stream }).on('line', line => {
+            try {
+                fs.mkdirSync(this.logDir, { recursive: true });
+                fs.appendFileSync(this.logPath, maskSecrets(line) + '\n', 'utf8');
+            } catch (e) { /* 로그 실패는 무시 */ }
+        });
+    }
+
+    _spawn() {
         const startedAt = Date.now();
-        let child;
-        try {
-            child = this.spawnImpl(this.exe, ['-c', this.configPath], { windowsHide: true, stdio: ['ignore', logFd, logFd] });
-        } finally {
-            if (typeof logFd === 'number') fs.closeSync(logFd);
-        }
+        const child = this.spawnImpl(this.exe, ['-c', this.configPath], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+        this._pipeLog(child.stdout);
+        this._pipeLog(child.stderr);
         this.child = child;
         this.log('[GO2RTC] 시작');
         child.on('error', e => this.error(`[GO2RTC] 실행 실패: ${e.message}`));
@@ -80,6 +103,9 @@ class Go2rtcProcess {
             this.event('go2rtc-exit', { code, restartInMs: wait });
             this.delay(wait).then(() => {
                 if (this.stopped) return;
+                if (this.makeConfig) {
+                    try { fs.writeFileSync(this.configPath, this.makeConfig(), 'utf8'); } catch (e) { this.error(`[GO2RTC] 설정 쓰기 실패: ${e.message}`); }
+                }
                 this._spawn();
                 this.onRestart();
             });
@@ -96,4 +122,4 @@ class Go2rtcProcess {
     }
 }
 
-module.exports = { Go2rtcProcess };
+module.exports = { Go2rtcProcess, maskSecrets };
