@@ -35,8 +35,12 @@ test('스트림이 없으면 streams: {} 를 쓴다', () => {
     assert.match(buildConfig({ ...base, streams: {} }), /streams: \{\}/);
 });
 
-test('streamNames: 원본, 서브, PC 변환본 이름', () => {
-    assert.deepEqual(streamNames(12), { main: 's12', sub: 's12_sub', h264: 's12_h264' });
+test('streamNames: 원본, 서브, PC 변환본 이름 (카메라 경로 /s1 등과 겹치지 않는 이름)', () => {
+    assert.deepEqual(streamNames(12), { main: 'cctvgo_k12', sub: 'cctvgo_k12_sub', h264: 'cctvgo_k12_h264' });
+});
+
+test('WebRTC 포트 외에는 외부에 열지 않는다 (srtp 끔)', () => {
+    assert.ok(buildConfig({ ...base, streams: {} }).includes('srtp:\n  listen: ""\n'));
 });
 
 test('변환기가 있으면 ffmpeg 경로와 h264 템플릿을 넣는다 (없으면 ffmpeg 항목 없음)', () => {

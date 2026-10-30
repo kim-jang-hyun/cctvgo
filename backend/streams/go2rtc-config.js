@@ -10,9 +10,13 @@
 const DEFAULT_PORTS = { api: 1984, rtsp: 8554, webrtc: 8555 };
 const STUN_SERVER = 'stun:stun.l.google.com:19302';
 
-/** 카메라 번호 k 의 go2rtc 스트림 이름: 원본, 서브, PC 브라우저용 H.264 변환본 */
+/**
+ * 카메라 번호 k 의 go2rtc 스트림 이름: 원본, 서브, PC 브라우저용 H.264 변환본.
+ * go2rtc 는 rtsp 주소의 경로가 /<스트림 이름> 이면 그 스트림을 가리키는 것으로 볼 수 있어서,
+ * 카메라 경로(/s1, /11 등)와 겹치지 않는 이름을 쓴다
+ */
 function streamNames(k) {
-    return { main: `s${k}`, sub: `s${k}_sub`, h264: `s${k}_h264` };
+    return { main: `cctvgo_k${k}`, sub: `cctvgo_k${k}_sub`, h264: `cctvgo_k${k}_h264` };
 }
 
 function buildConfig({ apiPort, rtspPort, webrtcPort, username, password, streams, ffmpeg = null }) {
@@ -31,6 +35,9 @@ function buildConfig({ apiPort, rtspPort, webrtcPort, username, password, stream
         `    - ${q(`stun:${webrtcPort}`)}`,
         '  ice_servers:',
         `    - urls: [${q(STUN_SERVER)}]`,
+        // 기본으로 켜지는 srtp(:8443) 는 쓰지 않는다. 외부에 열리는 것은 WebRTC 포트 하나뿐이어야 한다
+        'srtp:',
+        '  listen: ""',
     ];
     // H.265 → H.264 변환(PC 브라우저용): FFmpeg 경로와, 이 PC 에서 고른 변환기로 바꾼 h264 템플릿
     if (ffmpeg) {

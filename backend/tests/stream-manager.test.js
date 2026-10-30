@@ -32,28 +32,28 @@ const touched = calls => [...new Set(calls.map(c => c[1]))].sort();
 
 test('initialStreams: 1..N 번호를 배정하고 서브가 있으면 _sub 도 만든다', () => {
     const { mgr } = setup();
-    assert.deepEqual(mgr.initialStreams([{ url: A, subUrl: null }, { url: B, subUrl: SUB_B }]), { s1: A, s2: B, s2_sub: SUB_B });
+    assert.deepEqual(mgr.initialStreams([{ url: A, subUrl: null }, { url: B, subUrl: SUB_B }]), { cctvgo_k1: A, cctvgo_k2: B, cctvgo_k2_sub: SUB_B });
     assert.deepEqual(mgr.streamIds([A, B]), [1, 2]);
 });
 
 test('initialStreams: 변환원이 있으면 _h264 도 만든다', () => {
     const { mgr } = setup({ transcodeSource: url => `exec:ffmpeg -i ${url} {output}` });
     const s = mgr.initialStreams([{ url: A, subUrl: null }]);
-    assert.equal(s.s1_h264, `exec:ffmpeg -i ${A} {output}`);
+    assert.equal(s.cctvgo_k1_h264, `exec:ffmpeg -i ${A} {output}`);
 });
 
 test('add: 다음 번호를 돌려주고 그 카메라 이름만 PUT 한다', async () => {
     const { mgr, calls } = setup();
     mgr.initialStreams([{ url: A }, { url: B }]);
     assert.equal(await mgr.add(C), 3);
-    assert.deepEqual(calls, [['put', 's3', C]]);
+    assert.deepEqual(calls, [['put', 'cctvgo_k3', C]]);
 });
 
 test('add: 서브 주소가 있으면 _sub 도 PUT 한다', async () => {
     const { mgr, calls } = setup();
     mgr.initialStreams([]);
     await mgr.add(B, SUB_B);
-    assert.deepEqual(calls, [['put', 's1', B], ['put', 's1_sub', SUB_B]]);
+    assert.deepEqual(calls, [['put', 'cctvgo_k1', B], ['put', 'cctvgo_k1_sub', SUB_B]]);
 });
 
 test('remove 뒤 add: 번호를 재사용하지 않고 다른 카메라는 건드리지 않는다', async () => {
@@ -61,7 +61,7 @@ test('remove 뒤 add: 번호를 재사용하지 않고 다른 카메라는 건�
     mgr.initialStreams([{ url: A }, { url: B, subUrl: SUB_B }, { url: C }]);
     await mgr.remove(B);
     assert.equal(await mgr.add(D), 4);
-    assert.deepEqual(touched(calls), ['s2', 's2_h264', 's2_sub', 's4']);
+    assert.deepEqual(touched(calls), ['cctvgo_k2', 'cctvgo_k2_h264', 'cctvgo_k2_sub', 'cctvgo_k4']);
     assert.deepEqual(mgr.streamIds([A, C, D, B]), [1, 3, 4, null]);
 });
 
@@ -71,7 +71,7 @@ test('restart: 같은 번호로 그 카메라의 원본/서브만 바꾼다', as
     const B2 = 'rtsp://n:pw@192.168.0.2:554/y';
     const SUB_B2 = 'rtsp://n:pw@192.168.0.2:554/y2';
     await mgr.restart(B, B2, SUB_B2);
-    assert.deepEqual(calls, [['put', 's2', B2], ['put', 's2_sub', SUB_B2]]);
+    assert.deepEqual(calls, [['put', 'cctvgo_k2', B2], ['put', 'cctvgo_k2_sub', SUB_B2]]);
     assert.deepEqual(mgr.streamIds([A, B2]), [1, 2]);
 });
 
@@ -79,14 +79,14 @@ test('restart: 서브가 없어지면 _sub 를 지운다', async () => {
     const { mgr, calls } = setup();
     mgr.initialStreams([{ url: B, subUrl: SUB_B }]);
     await mgr.restart(B, B, null);
-    assert.deepEqual(calls, [['put', 's1', B], ['del', 's1_sub']]);
+    assert.deepEqual(calls, [['put', 'cctvgo_k1', B], ['del', 'cctvgo_k1_sub']]);
 });
 
 test('restart: 대응표에 없던 카메라면 새 번호로 켠다', async () => {
     const { mgr, calls } = setup();
     mgr.initialStreams([{ url: A }]);
     await mgr.restart(B, C);
-    assert.deepEqual(calls, [['put', 's2', C]]);
+    assert.deepEqual(calls, [['put', 'cctvgo_k2', C]]);
 });
 
 test('resync: 대응표 전체를 다시 PUT 하고, 그동안 들어온 add 는 끝난 뒤 실행된다', async () => {
@@ -99,7 +99,7 @@ test('resync: 대응표 전체를 다시 PUT 하고, 그동안 들어온 add 는
     open();
     api.gate = null;
     await Promise.all([r, a]);
-    assert.deepEqual(calls.map(c => c[1]), ['s1', 's2', 's2_sub', 's3']);
+    assert.deepEqual(calls.map(c => c[1]), ['cctvgo_k1', 'cctvgo_k2', 'cctvgo_k2_sub', 'cctvgo_k3']);
 });
 
 test('streamIds: 같은 주소가 여러 줄이면 앞에서부터 짝짓고, 없는 주소는 null', () => {
@@ -111,7 +111,7 @@ test('streamIds: 같은 주소가 여러 줄이면 앞에서부터 짝짓고, �
 test('add: go2rtc 가 실패해도 대응표에는 남는다 (cctv.txt 와 어긋나지 않게)', async () => {
     const { mgr, api } = setup();
     mgr.initialStreams([]);
-    api.fail.add('s1');
+    api.fail.add('cctvgo_k1');
     await assert.rejects(mgr.add(A));
     assert.deepEqual(mgr.streamIds([A]), [1]);
 });
@@ -119,8 +119,8 @@ test('add: go2rtc 가 실패해도 대응표에는 남는다 (cctv.txt 와 어�
 test('variantsOf: 원본 → 서브 → 변환본 순서, 없는 것은 빠진다', () => {
     const plain = setup();
     plain.mgr.initialStreams([{ url: A }, { url: B, subUrl: SUB_B }]);
-    assert.deepEqual(plain.mgr.variantsOf(1), [{ variant: 'main', name: 's1' }]);
-    assert.deepEqual(plain.mgr.variantsOf(2), [{ variant: 'main', name: 's2' }, { variant: 'sub', name: 's2_sub' }]);
+    assert.deepEqual(plain.mgr.variantsOf(1), [{ variant: 'main', name: 'cctvgo_k1' }]);
+    assert.deepEqual(plain.mgr.variantsOf(2), [{ variant: 'main', name: 'cctvgo_k2' }, { variant: 'sub', name: 'cctvgo_k2_sub' }]);
     assert.deepEqual(plain.mgr.variantsOf(9), []);
     const tr = setup({ transcodeSource: () => 'exec:x {output}' });
     tr.mgr.initialStreams([{ url: A }]);
@@ -132,7 +132,7 @@ test('setTranscodeSource 뒤 resync: 모든 카메라에 변환본을 더한다'
     mgr.initialStreams([{ url: A }]);
     mgr.setTranscodeSource(url => `exec:${url}`);
     await mgr.resync();
-    assert.deepEqual(calls, [['put', 's1', A], ['put', 's1_h264', `exec:${A}`]]);
+    assert.deepEqual(calls, [['put', 'cctvgo_k1', A], ['put', 'cctvgo_k1_h264', `exec:${A}`]]);
 });
 
 test('로그에 카메라 주소(비밀번호)를 남기지 않는다', async () => {
