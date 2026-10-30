@@ -28,3 +28,8 @@
 - 2560x1440 H.265→H.264 4Mbps: 화질 qsv 와 거의 같음, 지연 qsv 대비 1~2초 더 늦음, CPU 6.2%, 메모리 ~800MB(일정)
 - ld_vbr + scenario video_conference 로 바꿔도 지연 체감 차이 없음, CPU 5.8%, 메모리 820MB
 - hw_encoding 1 은 이 FFmpeg 에서 실패(-22)
+## go2rtc API 동작 확인 (계획용)
+- api.username/password 만 두면 localhost 요청은 인증 없이 통과(200). local_auth: true 를 켜야 localhost 도 401
+- POST /api/webrtc?src=NAME, Content-Type application/sdp, 본문 SDP offer → 201 application/sdp answer (host 후보에 공인 IP+LAN IP, srflx 포함). 브라우저는 ICE 수집을 끝낸 offer 를 보내야 함
+- 코덱 불일치: HTTP 500 "streams: codecs not matched: video:H265, audio:PCMA => video:H264"
+- 없는 스트림: 404
