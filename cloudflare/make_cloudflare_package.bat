@@ -38,7 +38,8 @@ for /f "tokens=1" %%a in ('cloudflared.exe tunnel list ^| findstr %TUNNEL_NAME%'
 
 :: 5. DNS 연결
 echo 🌐 DNS route 등록: %HOSTNAME%
-cloudflared.exe tunnel route dns %TUNNEL_NAME% %HOSTNAME%
+:: 같은 주소가 이전에 다른 터널(예: 대문자 ID 로 만든 터널)을 가리키고 있어도 이 터널로 바꾼다
+cloudflared.exe tunnel route dns --overwrite-dns %TUNNEL_NAME% %HOSTNAME%
 
 :: 6. 고객 폴더 생성
 echo 📁 고객 디렉토리 생성: %OUTPUT_DIR%

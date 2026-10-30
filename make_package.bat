@@ -139,8 +139,9 @@ exit /b 1
 
 :: 12-1. utils 폴더 복사
 if exist "%ROOT_DIR%utils" (
-xcopy "%ROOT_DIR%utils" "%PACKAGE_DIR%\utils" /E /I /Y
-echo [INFO] Copied utils folder
+:: 개발용 샘플 동영상(*.mp4)은 고객 패키지에 넣지 않는다
+robocopy "%ROOT_DIR%utils" "%PACKAGE_DIR%\utils" /E /XF *.mp4 /NFL /NDL /NJH /NJS /NP >nul
+echo [INFO] Copied utils folder ^(*.mp4 제외^)
 ) else (
 echo [ERROR] utils folder not found. Aborting script.
 exit /b 1
