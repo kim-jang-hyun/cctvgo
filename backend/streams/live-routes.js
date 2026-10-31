@@ -12,6 +12,16 @@ const express = require('express');
 const K_RE = /^\d{1,4}$/;
 const CODEC_MISMATCH_RE = /codecs not matched/i;
 
+/**
+ * go2rtc 답에 실제로 보내는 영상이 있는지. go2rtc 는 영상 코덱이 안 맞아도 음성만 맞으면 영상을 inactive 로 둔 답을
+ * 성공(201)으로 준다 (H.265 카메라 + PC 크롬, 실기 확인). 그러면 화면은 까맣고 음성만 나오므로 코덱 불일치로 본다
+ */
+function answerHasVideo(sdp) {
+    const section = String(sdp || '').split(/\r?\n(?=m=)/).find(x => /^m=video /.test(x));
+    if (!section || /^m=video 0 /.test(section)) return false;
+    return !/^a=(inactive|recvonly)\s*$/m.test(section);
+}
+
 function registerLiveRoutes(app, { authMiddleware, streams, api, diag = { connection() {} } }) {
     const sdpBody = express.text({ type: 'application/sdp', limit: '32kb' });
 
@@ -40,11 +50,12 @@ function registerLiveRoutes(app, { authMiddleware, streams, api, diag = { connec
         const tries = h265 ? all.filter(v => v.variant === 'main') : all;
         for (const { variant, name } of tries) {
             const r = await api.offer(name, sdp);
-            if (r.ok) {
+            if (r.ok && answerHasVideo(r.body)) {
                 record(true, variant, null);
                 return res.json({ status: 'success', sdp: r.body, variant });
             }
-            if (!(r.status === 500 && CODEC_MISMATCH_RE.test(r.body))) {
+            const codecMismatch = (r.ok && !answerHasVideo(r.body)) || (r.status === 500 && CODEC_MISMATCH_RE.test(r.body));
+            if (!codecMismatch) {
                 record(false, variant, 'unavailable');
                 return res.status(502).json({ status: 'error', reason: 'unavailable', message: '카메라 영상을 가져오지 못했습니다.' });
             }

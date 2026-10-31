@@ -5,7 +5,9 @@ const express = require('express');
 const { registerLiveRoutes } = require('../streams/live-routes');
 
 const MISMATCH = { ok: false, status: 500, body: 'streams: codecs not matched: video:H265 => video:H264' };
-const answer = name => ({ ok: true, status: 201, body: `v=0 answer ${name}` });
+const answer = name => ({ ok: true, status: 201, body: `v=0 answer ${name}\r\nm=video 9 UDP/TLS/RTP/SAVPF 96\r\na=sendonly\r\n` });
+// go2rtc 는 영상 코덱이 안 맞아도 음성만 맞으면 영상을 inactive 로 둔 답을 201 로 준다 (실기 확인: H.265 카메라 + PC 크롬)
+const AUDIO_ONLY = { ok: true, status: 201, body: 'v=0\r\nm=video 9 UDP/TLS/RTP/SAVPF 96\r\na=rtpmap:96 H264/90000\r\na=inactive\r\nm=audio 9 UDP/TLS/RTP/SAVPF 8\r\na=sendonly\r\n' };
 
 /** variants: k → [{variant, name}], replies: name → offer 결과 */
 async function startApp({ variants = {}, replies = {} } = {}) {
@@ -53,7 +55,7 @@ test('H.265 를 받을 수 있는 브라우저는 원본만 시도한다', async
     const app = await startApp({ variants: H265_CAM, replies: { cctvgo_k1: answer('cctvgo_k1') } });
     try {
         const body = await (await app.offer('/api/live/1/offer?epoch=E1&h265=1')).json();
-        assert.deepEqual(body, { status: 'success', sdp: 'v=0 answer cctvgo_k1', variant: 'main' });
+        assert.deepEqual(body, { status: 'success', sdp: answer('cctvgo_k1').body, variant: 'main' });
         assert.deepEqual(app.offers.map(o => o.name), ['cctvgo_k1']);
         assert.equal(app.offers[0].sdp, 'v=0 offer');
     } finally { await app.close(); }
@@ -142,4 +144,24 @@ test('서버가 다시 시작해 번호 체계(epoch)가 바뀌었으면 409 sta
         }
         assert.equal(app.offers.length, 0);
     } finally { await app.close(); }
+});
+
+test('답에 영상이 없으면(음성만, 영상 inactive) 코덱 불일치로 보고 다음으로 넘어간다', async () => {
+    const app = await startApp({ variants: H265_CAM, replies: { cctvgo_k1: AUDIO_ONLY, cctvgo_k1_sub: AUDIO_ONLY, cctvgo_k1_h264: answer('h') } });
+    try {
+        const body = await (await app.offer('/api/live/1/offer?epoch=E1&h265=0')).json();
+        assert.equal(body.variant, 'h264');
+        assert.deepEqual(app.offers.map(o => o.name), ['cctvgo_k1', 'cctvgo_k1_sub', 'cctvgo_k1_h264']);
+    } finally { await app.close(); }
+});
+
+test('영상 줄이 없거나 포트 0 인 답도 영상 없음으로 본다', async () => {
+    const noVideo = { ok: true, status: 201, body: 'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 8\r\na=sendonly\r\n' };
+    const port0 = { ok: true, status: 201, body: 'v=0\r\nm=video 0 UDP/TLS/RTP/SAVPF 96\r\na=sendonly\r\n' };
+    for (const reply of [noVideo, port0]) {
+        const app = await startApp({ variants: { 1: [{ variant: 'main', name: 'cctvgo_k1' }] }, replies: { cctvgo_k1: reply } });
+        try {
+            assert.equal((await (await app.offer('/api/live/1/offer?epoch=E1&h265=0')).json()).reason, 'codec');
+        } finally { await app.close(); }
+    }
 });
