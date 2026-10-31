@@ -427,3 +427,23 @@ test('edit: 이름만 바꾸면 서브 주소가 지워지지 않는다', async 
         assert.equal(after.subUrl, SUB5);
     } finally { await app.close(); }
 });
+
+test('edit: 기존 경로로 계정이 확인된 뒤 전체 탐색에서 ONVIF 만 실패하면 ONVIF 를 건너뛰고 다시 찾는다', async () => {
+    const calls = [];
+    const app = await startApp({
+        deps: {
+            findStream: async a => {
+                calls.push({ path: a.path, skipOnvif: !!a.skipOnvif });
+                if (a.path) return { status: 'path_not_found', tried: [], diagnostics: '' };
+                if (!a.skipOnvif) return { status: 'auth_failed', onvifOnly: true, ambiguous: true, tried: [], diagnostics: '' };
+                return found('rtsp://admin:new@192.168.0.5:554/y');
+            },
+        },
+    });
+    try {
+        const cam = app.cams()[0];
+        const body = await (await app.call('POST', '/api/cameras/0/edit', { hash: cam.hash, username: 'admin', password: 'new' })).json();
+        assert.equal(body.status, 'saved');
+        assert.deepEqual(calls, [{ path: '/x', skipOnvif: false }, { path: undefined, skipOnvif: false }, { path: undefined, skipOnvif: true }]);
+    } finally { await app.close(); }
+});

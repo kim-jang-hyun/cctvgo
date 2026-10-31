@@ -198,15 +198,49 @@ test('ONVIF가 알려 준 주소가 실제로 접속되지 않으면 채택하�
     } finally { await rtsp.close(); await onvif.close(); }
 });
 
-test('ONVIF 인증 실패 + RTSP 인증 실패를 합쳐도 카메라가 본 인증 실패는 예산 이하', async () => {
+test('ONVIF 로그인 실패: RTSP 로 더 시도하지 않고 멈춰 실패 1회만 쓴다 (비밀번호를 고쳐 한 번 더 시도할 수 있게)', async () => {
     const rtsp = await createMockRtsp({ validPaths: ['/b'] });
     const onvif = await createMockOnvif({ rtspPort: rtsp.port });
     try {
         const budget = new AuthBudget();
         const r = await run(rtsp, { password: 'wrong', budget, settings: settingsFor(BUDGET_PATHS, [onvif.port]) });
         assert.equal(r.status, 'auth_failed');
+        assert.equal(r.onvifOnly, true);
+        assert.equal(r.remaining, MAX - 1);
+        assert.equal(budget.failures(HOST), 1);
+        assert.equal(rtsp.state.requests.filter(q => q.authed).length, 0, 'RTSP 에는 자격 증명을 보내지 않음');
+        assert.equal(onvif.state.failedAuth + rtsp.state.failedAuth, 1);
+    } finally { await rtsp.close(); await onvif.close(); }
+});
+
+test('같은 비밀번호로 다시 시도(skipOnvif): ONVIF 는 건너뛰고 RTSP 로 찾는다 (ONVIF 계정이 따로 있는 카메라)', async () => {
+    const rtsp = await createMockRtsp({ validPaths: ['/b'] });
+    const onvif = await createMockOnvif({ rtspPort: rtsp.port, users: { onvifuser: 'other' } });
+    try {
+        const budget = new AuthBudget();
+        const first = await run(rtsp, { budget, settings: settingsFor(['/a', '/b'], [onvif.port]) });
+        assert.equal(first.status, 'auth_failed');
+        assert.equal(first.onvifOnly, true);
+        const credentialedBefore = onvif.state.credentialed;
+        const second = await run(rtsp, { budget, skipOnvif: true, settings: settingsFor(['/a', '/b'], [onvif.port]) });
+        assert.equal(second.status, 'found');
+        assert.equal(second.candidates[0].url, `rtsp://admin:pw@${HOST}:${rtsp.port}/b`);
+        assert.equal(onvif.state.credentialed, credentialedBefore, '두 번째에는 ONVIF 에 자격 증명을 보내지 않음');
+        assert.equal(budget.failures(HOST), 0, '성공하면 예산이 초기화된다');
+    } finally { await rtsp.close(); await onvif.close(); }
+});
+
+test('같은 비밀번호로 다시 시도했는데 RTSP 도 틀리면 합쳐서 예산(2회)을 넘지 않는다', async () => {
+    const rtsp = await createMockRtsp({ validPaths: ['/b'] });
+    const onvif = await createMockOnvif({ rtspPort: rtsp.port });
+    try {
+        const budget = new AuthBudget();
+        await run(rtsp, { password: 'wrong', budget, settings: settingsFor(BUDGET_PATHS, [onvif.port]) });
+        const r = await run(rtsp, { password: 'wrong', budget, skipOnvif: true, settings: settingsFor(BUDGET_PATHS, [onvif.port]) });
+        assert.equal(r.status, 'auth_failed');
         assert.ok(onvif.state.failedAuth + rtsp.state.failedAuth <= MAX, `${onvif.state.failedAuth}+${rtsp.state.failedAuth}`);
         assert.equal(budget.isExhausted(HOST), true);
+        assert.equal(r.remaining, 0);
     } finally { await rtsp.close(); await onvif.close(); }
 });
 
@@ -225,7 +259,7 @@ test('진단 정보에는 호스트/서버 헤더/시도 목록이 있고 비밀
     } finally { await cam.close(); }
 });
 
-test('비표준 문구로 거절하는 ONVIF + 비밀번호 오류 RTSP: 카메라가 본 인증 실패는 합쳐서 예산 이하', async () => {
+test('비표준 문구로 거절하는 ONVIF: 로그인 실패로 보고 멈춘다', async () => {
     const rtsp = await createMockRtsp({ validPaths: ['/b'] });
     const onvif = await createMockOnvif({ rtspPort: rtsp.port, canonicalFault: false, faultText: 'Authentication failed for user' });
     try {

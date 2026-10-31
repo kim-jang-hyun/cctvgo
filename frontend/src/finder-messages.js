@@ -9,7 +9,11 @@ export function messageFor(r, vendorHint = '') {
       if (r.authUnsupported) {
         return '이 카메라는 지원하지 않는 로그인 방식(Digest SHA-256 등)을 사용합니다. 카메라 설명서의 RTSP 주소를 "RTSP 주소 직접 입력"으로 넣어 주세요.';
       }
-      const wait = r.retryAfterSec > 0 ? ` ${lockedNotice(r.retryAfterSec)}` : '';
+      const wait = r.retryAfterSec > 0 ? ` ${lockedNotice(r.retryAfterSec)}` : remainingNotice(r);
+      if (r.onvifOnly) {
+        return '비밀번호가 틀렸거나, 이 카메라는 ONVIF용 계정이 따로 있을 수 있습니다. '
+          + '비밀번호가 확실히 맞다면 [같은 비밀번호로 다시 시도]를, 틀렸다면 [아이디/비밀번호 다시 입력]을 눌러 주세요.' + wait;
+      }
       return (r.ambiguous
         ? `아이디/비밀번호 또는 경로 문제일 수 있습니다.${vendor} 카메라 자체 웹페이지에서 로그인되는 아이디/비밀번호인지 먼저 확인하고, 안 되면 "주소 직접 입력"을 사용하세요.`
         : '카메라 아이디 또는 비밀번호가 맞지 않습니다. 카메라 자체 웹페이지에서 로그인되는 아이디/비밀번호인지 먼저 확인하세요.') + wait;
@@ -23,6 +27,13 @@ export function messageFor(r, vendorHint = '') {
     default:
       return '주소를 찾지 못했습니다.';
   }
+}
+
+// 아직 잠기지 않았을 때 남은 시도 횟수 (카메라 잠금을 막기 위해 30분에 2회까지)
+function remainingNotice(r) {
+  return Number.isInteger(r.remaining) && r.remaining > 0
+    ? ` 남은 시도: ${r.remaining}회 (모두 실패하면 이 카메라는 30분 동안 다시 시도할 수 없습니다)`
+    : '';
 }
 
 // 실패가 2회 쌓여 대기에 들어갔을 때의 안내. 다시 시도할 수 있는 시각도 함께 보여 준다
