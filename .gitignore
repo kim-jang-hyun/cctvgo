@@ -9,7 +9,7 @@
 /frontend/node_modules
 /frontend/dist
 
-/hls
+/go2rtc/go2rtc.yaml
 /logs
 
 # cloudflare 폴더제외 (cloudflared.exe, make_cloudflare_package.bat 는 예외)

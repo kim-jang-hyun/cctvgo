@@ -59,7 +59,7 @@
       <input v-model.trim="username" autocomplete="off" />
       <label>카메라 비밀번호</label>
       <input v-model="password" type="password" autocomplete="off" @keyup.enter="runProbe(false)" />
-      <p class="notice">카메라 자체 웹페이지에서 로그인되는 아이디/비밀번호인지 먼저 확인하세요. 카메라가 잠기지 않도록 로그인 실패가 2회 쌓이면 그 카메라는 30분 동안 다시 시도할 수 없습니다.</p>
+      <LoginWarning />
       <div class="row">
         <button @click="reset">처음으로</button>
         <button class="primary" :disabled="!username" @click="runProbe(false)">주소 찾기</button>
@@ -88,20 +88,23 @@
       <p v-if="saveError" class="error">{{ saveError }}</p>
       <div class="row">
         <button @click="reset">처음으로</button>
-        <button class="primary" :disabled="saving" @click="save(result.candidates[selected].url, name)">{{ saving ? '추가 중...' : '추가' }}</button>
+        <button class="primary" :disabled="saving" @click="save(result.candidates[selected], name)">{{ saving ? '추가 중...' : '추가' }}</button>
       </div>
     </section>
 
     <!-- 5. 결과: 못 찾음 -->
     <section v-else-if="step === 'failed'" class="card">
-      <p class="error">{{ failMessage }}</p>
+      <FailMessage :text="failMessage" />
+      <LoginWarning v-if="needsLoginWarning(result)" />
       <div class="row wrap">
         <template v-if="origin === 'rtsp'">
           <button @click="step = 'select'">RTSP 주소 다시 입력</button>
         </template>
         <template v-else>
+          <!-- 비밀번호와 경로 문제를 구별할 수 없으면 비밀번호를 거듭 넣지 않도록 주소 직접 입력을 앞에 둔다 -->
+          <button v-if="isAmbiguousAuth(result)" class="primary" @click="step = 'manual'">주소 직접 입력</button>
           <button @click="step = 'credentials'">아이디/비밀번호 다시 입력</button>
-          <button @click="step = 'manual'">주소 직접 입력</button>
+          <button v-if="!isAmbiguousAuth(result)" @click="step = 'manual'">주소 직접 입력</button>
           <button @click="reset">처음으로</button>
         </template>
       </div>
@@ -148,7 +151,9 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { api } from '../api';
-import { messageFor, maskedUrl, APPLY_FAILED } from '../finder-messages';
+import { messageFor, isAmbiguousAuth, needsLoginWarning, maskedUrl, APPLY_FAILED } from '../finder-messages';
+import LoginWarning from '../components/LoginWarning.vue';
+import FailMessage from '../components/FailMessage.vue';
 
 // --- 상태 ---
 const step = ref('select');   // select | credentials | probing | result | failed | manual | saved
@@ -219,7 +224,7 @@ function goCredentials() {
 }
 
 /** probe 를 실행하고, 못 찾으면 failed 단계로 보낸다. 찾았으면 결과를 돌려준다 */
-async function probe(body) {
+async function probe(body, context = 'scan') {
   step.value = 'probing';
   try {
     result.value = await api('/api/finder/probe', { method: 'POST', body: JSON.stringify(body) });
@@ -230,7 +235,7 @@ async function probe(body) {
     return null;
   }
   if (result.value.status !== 'found') {
-    failMessage.value = messageFor(result.value, vendorHint.value);
+    failMessage.value = messageFor(result.value, vendorHint.value, context);
     step.value = 'failed';
     return null;
   }
@@ -248,7 +253,7 @@ async function runProbe(manual) {
     body.path = path.value;
     if (port.value) body.port = port.value;
   }
-  if (!(await probe(body))) return;
+  if (!(await probe(body, manual ? 'manual' : 'scan'))) return;
   selected.value = 0;
   saveError.value = '';
   step.value = 'result';
@@ -257,10 +262,10 @@ async function runProbe(manual) {
 async function runRtspProbe() {
   origin.value = 'rtsp';
   vendorHint.value = '';
-  const r = await probe({ rtspUrl: rtspUrl.value, username: rtspUser.value, password: rtspPassword.value });
+  const r = await probe({ rtspUrl: rtspUrl.value, username: rtspUser.value, password: rtspPassword.value }, 'manual');
   if (!r) return;
   saveError.value = '';
-  const ok = await save(r.candidates[0].url, rtspName.value);
+  const ok = await save(r.candidates[0], rtspName.value);
   if (!ok) {
     // 접속은 됐지만 저장 실패 (중복 등): 입력 화면으로 돌아가 이유를 보여 준다
     scanError.value = saveError.value;
@@ -268,11 +273,12 @@ async function runRtspProbe() {
   }
 }
 
-async function save(url, cameraName) {
+// 후보에 서브 스트림(H.265 카메라의 PC 브라우저용 대체)이 있으면 함께 저장한다
+async function save(candidate, cameraName) {
   saving.value = true;
   saveError.value = '';
   try {
-    const r = await api('/api/cameras', { method: 'POST', body: JSON.stringify({ url, name: cameraName }) });
+    const r = await api('/api/cameras', { method: 'POST', body: JSON.stringify({ url: candidate.url, name: cameraName, subUrl: candidate.subUrl || null }) });
     applied.value = r.applied;
     step.value = 'saved';
     return true;
@@ -342,7 +348,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .muted { color: #777; font-size: 13px; margin: 0; }
 .desc { margin: 0 0 4px; }
 .notice { background: #fff8e1; border: 1px solid #ffe08a; border-radius: 6px; padding: 8px; font-size: 13px; margin: 4px 0; }
-.error { color: #c62828; margin: 4px 0; word-break: keep-all; }
+.error { color: #c62828; margin: 4px 0; word-break: keep-all; white-space: pre-line; }
 .ok { color: #2e7d32; font-weight: 700; margin: 0; }
 .url { font-family: monospace; background: #f3f3f3; padding: 6px 8px; border-radius: 6px; word-break: break-all; }
 .radio { display: flex; gap: 8px; align-items: center; font-weight: 400; }

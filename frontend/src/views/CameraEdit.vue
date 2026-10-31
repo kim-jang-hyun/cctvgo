@@ -21,7 +21,8 @@
       <input v-model.trim="username" autocomplete="off" />
       <label>카메라 비밀번호</label>
       <input v-model="password" type="password" autocomplete="off" placeholder="바꾸지 않으려면 비워 두세요" @keyup.enter="save" />
-      <p class="notice">아이디나 비밀번호를 바꾸면 카메라에 다시 접속해 확인합니다. 카메라가 잠기지 않도록 로그인 실패가 2회 쌓이면 그 카메라는 30분 동안 다시 시도할 수 없습니다.</p>
+      <p class="notice">아이디나 비밀번호를 바꾸면 카메라에 다시 접속해 확인합니다.</p>
+      <LoginWarning />
       <p v-if="saveError" class="error">{{ saveError }}</p>
       <div class="row">
         <router-link to="/cameras" class="btn">취소</router-link>
@@ -51,7 +52,8 @@
 
     <!-- 4. 실패 -->
     <section v-else-if="step === 'failed'" class="card">
-      <p class="error">{{ failMessage }}</p>
+      <FailMessage :text="failMessage" />
+      <LoginWarning v-if="needsLoginWarning(lastResult)" />
       <p class="muted">카메라 설정은 바뀌지 않았습니다.</p>
       <div class="row wrap">
         <button @click="step = 'form'">다시 입력</button>
@@ -77,7 +79,9 @@
 import { ref, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { api } from '../api';
-import { messageFor, APPLY_FAILED } from '../finder-messages';
+import { messageFor, needsLoginWarning, APPLY_FAILED } from '../finder-messages';
+import LoginWarning from '../components/LoginWarning.vue';
+import FailMessage from '../components/FailMessage.vue';
 
 const route = useRoute();
 const index = Number(route.params.index);
@@ -91,6 +95,7 @@ const password = ref('');
 const candidates = ref([]);
 const selected = ref(0);
 const failMessage = ref('');
+const lastResult = ref(null);   // 실패한 확인 결과 (로그인 실패면 경고 상자를 함께 보여 준다)
 const diagnostics = ref('');
 const saveError = ref('');
 const applied = ref(true);
@@ -107,6 +112,7 @@ async function load() {
     step.value = 'form';
   } catch (e) {
     failMessage.value = e.message;
+    lastResult.value = null;
     step.value = 'missing';
   }
 }
@@ -130,6 +136,7 @@ async function save() {
   } catch (e) {
     if (e.status === 409 && /목록이 바뀌었습니다/.test(e.message)) {
       failMessage.value = e.message;
+      lastResult.value = null;
       step.value = 'missing';
       return;
     }
@@ -144,7 +151,8 @@ async function save() {
     step.value = 'choose';
     return;
   }
-  failMessage.value = messageFor(r);
+  lastResult.value = r;
+  failMessage.value = messageFor(r, '', 'edit');
   diagnostics.value = r.diagnostics || '';
   step.value = 'failed';
 }
@@ -199,7 +207,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .muted { color: #777; font-size: 13px; margin: 0; }
 .desc { margin: 0 0 4px; }
 .notice { background: #fff8e1; border: 1px solid #ffe08a; border-radius: 6px; padding: 8px; font-size: 13px; margin: 4px 0; }
-.error { color: #c62828; margin: 4px 0; word-break: keep-all; }
+.error { color: #c62828; margin: 4px 0; word-break: keep-all; white-space: pre-line; }
 .ok { color: #2e7d32; font-weight: 700; margin: 0; }
 .url { font-family: monospace; font-size: 12px; color: #555; word-break: break-all; }
 .radio { display: flex; gap: 8px; align-items: center; font-weight: 400; }

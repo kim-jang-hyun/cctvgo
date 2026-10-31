@@ -173,12 +173,25 @@ function setupUrl(resp, uri) {
     return base + (base.endsWith('/') ? '' : '/') + control;
 }
 
+/** SDP 의 첫 영상 트랙 코덱 (H264, H265 등). HEVC 표기는 H265 로 맞춘다. 영상 트랙이 없으면 null */
+function parseVideoCodec(sdp) {
+    const section = String(sdp || '').split(/\r?\n(?=m=)/).find(s => /^m=video/.test(s));
+    if (!section) return null;
+    const pt = (/^m=video\s+\S+\s+\S+\s+(\d+)/.exec(section) || [])[1];
+    const m = (pt && new RegExp(`^a=rtpmap:${pt}\s+([^/\s]+)`, 'm').exec(section)) || /^a=rtpmap:\d+\s+([^/\s]+)/m.exec(section);
+    if (!m) return null;
+    const codec = m[1].toUpperCase();
+    return codec === 'HEVC' ? 'H265' : codec;
+}
+
 function classify(resp, authSent, extraHeaders) {
     let status = 'other';
     if (resp.code === 200) status = 'ok';
     else if (resp.code === 401) status = 'unauthorized';
     else if (resp.code === 404) status = 'not_found';
-    return { status, code: resp.code, authSent, headers: { ...(extraHeaders || {}), ...resp.headers } };
+    const result = { status, code: resp.code, authSent, headers: { ...(extraHeaders || {}), ...resp.headers } };
+    if (resp.code === 200) result.codec = parseVideoCodec(resp.body);
+    return result;
 }
 
 async function describe({ host, port, path, username = '', password = '', timeoutMs = 2000 }) {
@@ -247,4 +260,4 @@ async function describe({ host, port, path, username = '', password = '', timeou
     }
 }
 
-module.exports = { describe, parseChallenge };
+module.exports = { describe, parseChallenge, parseVideoCodec };

@@ -193,3 +193,25 @@ test('username 에 제어문자/따옴표가 있으면 요청을 보내지 않�
         assert.equal(cam.state.requests.length, 0, '소켓 요청 없음');
     } finally { await cam.close(); }
 });
+
+// --- 코덱 확인 ---
+const { parseVideoCodec } = require('../finder/rtsp-probe');
+
+test('parseVideoCodec: 첫 영상 트랙의 코덱 (HEVC 는 H265 로)', () => {
+    const sdp = codec => `v=0\r\nm=audio 0 RTP/AVP 8\r\na=rtpmap:8 PCMA/8000\r\nm=video 0 RTP/AVP 96\r\na=rtpmap:96 ${codec}/90000\r\n`;
+    assert.equal(parseVideoCodec(sdp('H264')), 'H264');
+    assert.equal(parseVideoCodec(sdp('H265')), 'H265');
+    assert.equal(parseVideoCodec(sdp('HEVC')), 'H265');
+    assert.equal(parseVideoCodec('v=0\r\nm=audio 0 RTP/AVP 8\r\na=rtpmap:8 PCMA/8000\r\n'), null);
+    assert.equal(parseVideoCodec(''), null);
+});
+
+test('describe: 200 이면 SDP 의 영상 코덱을 함께 돌려준다', async () => {
+    const { createMockRtsp } = require('./helpers/mock-rtsp');
+    const cam = await createMockRtsp({ validPaths: ['/h5'], codecs: { '/h5': 'H265' } });
+    try {
+        const r = await describe({ host: '127.0.0.1', port: cam.port, path: '/h5', username: 'admin', password: 'pw' });
+        assert.equal(r.status, 'ok');
+        assert.equal(r.codec, 'H265');
+    } finally { await cam.close(); }
+});

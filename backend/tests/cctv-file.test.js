@@ -205,3 +205,55 @@ test('saveCameras: CONFLICT 면 파일과 백업을 건드리지 않는다', () 
     assert.equal(fs.readFileSync(file, 'utf8'), THREE);
     assert.equal(fs.existsSync(file + '.bak'), false);
 });
+
+// --- 서브 스트림 주소 (URL, 이름, 서브URL) ---
+const { withCredentials } = require('../finder/cctv-file');
+const MAIN = 'rtsp://a:b@192.168.0.2:554/Streaming/Channels/101';
+const SUB = 'rtsp://a:b@192.168.0.2:554/Streaming/Channels/102';
+
+test('parseCameras: 기존 형식(URL, 이름)은 서브 주소가 없다', () => {
+    const [c] = parseCameras(`${MAIN}, 거실\n`);
+    assert.equal(c.url, MAIN);
+    assert.equal(c.name, '거실');
+    assert.equal(c.subUrl, null);
+});
+
+test('parseCameras: 세 번째 필드가 rtsp:// 이면 서브 주소다', () => {
+    const [c] = parseCameras(`${MAIN}, 거실, ${SUB}\r\n`);
+    assert.equal(c.name, '거실');
+    assert.equal(c.subUrl, SUB);
+});
+
+test('parseCameras: 세 번째 필드가 rtsp 가 아니면 지금처럼 이름에 포함된다', () => {
+    const [c] = parseCameras(`${MAIN}, 거실, 메모\n`);
+    assert.equal(c.name, '거실, 메모');
+    assert.equal(c.subUrl, null);
+});
+
+test('append: 서브 주소를 세 번째 필드로 쓴다', () => {
+    const r = applyEdit('', { type: 'append', url: MAIN, name: '거실', subUrl: SUB });
+    assert.equal(r.text, `${MAIN}, 거실, ${SUB}\r\n`);
+    assert.equal(parseCameras(r.text)[0].subUrl, SUB);
+});
+
+test('update: 이름만 바꾸면 서브 주소가 유지되고, subUrl:null 이면 지워진다', () => {
+    const text = `${MAIN}, 거실, ${SUB}\n`;
+    const [c] = parseCameras(text);
+    const kept = applyEdit(text, { type: 'update', index: 0, hash: c.hash, name: '안방' });
+    assert.equal(kept.text, `${MAIN}, 안방, ${SUB}\n`);
+    const removed = applyEdit(text, { type: 'update', index: 0, hash: c.hash, subUrl: null });
+    assert.equal(removed.text, `${MAIN}, 거실\n`);
+});
+
+test('update: 새 서브 주소로 바꾼다', () => {
+    const text = `${MAIN}, 거실\n`;
+    const [c] = parseCameras(text);
+    const r = applyEdit(text, { type: 'update', index: 0, hash: c.hash, url: MAIN, subUrl: SUB });
+    assert.equal(parseCameras(r.text)[0].subUrl, SUB);
+});
+
+test('withCredentials: 호스트/포트/경로는 그대로 두고 계정만 바꾼다', () => {
+    assert.equal(
+        withCredentials('rtsp://old:p%21@192.168.0.5:554/onvif2', { username: 'new', password: 'a#b' }),
+        'rtsp://new:a%23b@192.168.0.5:554/onvif2');
+});

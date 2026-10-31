@@ -4,7 +4,8 @@ const fs = require('fs');
 
 /**
  * cctv.txt 읽기/쓰기.
- * 카메라 줄 형식: rtsp://아이디:비밀번호@IP:포트/경로, 이름
+ * 카메라 줄 형식: rtsp://아이디:비밀번호@IP:포트/경로, 이름[, 서브 스트림 주소]
+ *   이름에는 쉼표가 들어갈 수 없으므로(sanitizeName) 세 번째 필드는 rtsp:// 로 시작할 때만 서브 주소로 본다.
  * - '#' 주석과 빈 줄은 그대로 보존한다.
  * - 아이디/비밀번호는 URL 인코딩한다 (cctv.txt 안내의 특수문자 코드표와 동일: ! -> %21, * -> %2A ...).
  */
@@ -46,8 +47,14 @@ function parseCameras(text) {
         .map((line, index) => {
             const i = line.indexOf(',');
             const url = (i >= 0 ? line.slice(0, i) : line).trim();
-            const name = i >= 0 ? line.slice(i + 1).trim() : '';
-            return { index, url, name, raw: line.trim(), hash: lineHash(line) };
+            let name = i >= 0 ? line.slice(i + 1).trim() : '';
+            let subUrl = null;
+            const j = name.lastIndexOf(',');
+            if (j >= 0 && /^rtsp:\/\//i.test(name.slice(j + 1).trim())) {
+                subUrl = name.slice(j + 1).trim();
+                name = name.slice(0, j).trim();
+            }
+            return { index, url, name, subUrl, raw: line.trim(), hash: lineHash(line) };
         });
 }
 
@@ -78,6 +85,18 @@ function parseRtspUrl(url) {
     };
 }
 
+/** 호스트/포트/경로는 그대로 두고 아이디/비밀번호만 바꾼 주소 */
+function withCredentials(url, { username, password }) {
+    const p = parseRtspUrl(url);
+    if (!p) return url;
+    const rest = /^rtsp:\/\/[^/?]*(.*)$/i.exec(String(url).trim())[1] || '';
+    return buildRtspUrl({ username, password, host: p.host, port: p.port, path: rest });
+}
+
+function cameraLine(url, name, subUrl) {
+    return subUrl ? `${url}, ${name}, ${subUrl}` : `${url}, ${name}`;
+}
+
 /** 같은 카메라 영상인지 (호스트/포트/경로 비교, 계정은 무시) */
 function sameStream(a, b) {
     const x = parseRtspUrl(a);
@@ -91,7 +110,8 @@ function editError(code, message) {
 
 /**
  * text 에 추가/수정/삭제를 적용한 새 text 를 반환한다 (파일 접근 없음)
- * op: { type: 'append', url, name } | { type: 'update', index, hash, url?, name? } | { type: 'remove', index, hash }
+ * op: { type: 'append', url, name, subUrl? } | { type: 'update', index, hash, url?, name?, subUrl? } | { type: 'remove', index, hash }
+ *   update 의 subUrl: undefined 면 기존 서브 주소 유지, null 이면 지운다
  * 수정/삭제는 순번과 줄 해시가 모두 맞아야 한다 (다른 창에서 목록이 바뀌었으면 CONFLICT)
  */
 function applyEdit(text, op) {
@@ -100,7 +120,7 @@ function applyEdit(text, op) {
 
     if (op.type === 'append') {
         if (cameras.some(c => sameStream(c.url, op.url))) throw editError('DUPLICATE', '이미 등록된 카메라입니다.');
-        const newLine = `${op.url}, ${sanitizeName(op.name, `카메라 ${cameras.length + 1}`)}`;
+        const newLine = cameraLine(op.url, sanitizeName(op.name, `카메라 ${cameras.length + 1}`), op.subUrl || null);
         const sep = text.length === 0 || /\n$/.test(text) ? '' : eol;
         return { text: text + sep + newLine + eol, index: cameras.length };
     }
@@ -117,7 +137,8 @@ function applyEdit(text, op) {
             } else {
                 const url = op.url || target.url;
                 const name = op.name !== undefined ? op.name : target.name;
-                lines[i] = `${url}, ${sanitizeName(name, `카메라 ${op.index + 1}`)}`;
+                const subUrl = op.subUrl !== undefined ? op.subUrl : target.subUrl;
+                lines[i] = cameraLine(url, sanitizeName(name, `카메라 ${op.index + 1}`), subUrl);
             }
             break;
         }
@@ -142,4 +163,4 @@ function saveCameras(filePath, op) {
     return { index: result.index, backup };
 }
 
-module.exports = { encodeCred, buildRtspUrl, parseCameras, parseRtspUrl, sameStream, applyEdit, saveCameras };
+module.exports = { encodeCred, buildRtspUrl, parseCameras, parseRtspUrl, sameStream, withCredentials, applyEdit, saveCameras };

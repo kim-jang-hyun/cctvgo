@@ -55,7 +55,7 @@ echo [ERROR] cctv.txt not found. Aborting script.
 exit /b 1
 )
 
-:: 6. ffmpeg 폴더 복사
+:: 6. ffmpeg folder (used by go2rtc to convert H.265 cameras to H.264 for PC browsers)
 if exist "%FFMPEG_DIR%" (
 xcopy "%FFMPEG_DIR%" "%PACKAGE_DIR%\ffmpeg" /E /I /Y
 echo [INFO] Copied ffmpeg folder
@@ -64,18 +64,16 @@ echo [ERROR] ffmpeg folder not found. Aborting script.
 exit /b 1
 )
 
-:: 7. ffmpeg 스크립트 복사 (영상은 cctvgo-service.exe 가 카메라마다 run_single_stream.bat 으로 켠다)
-if exist "%ROOT_DIR%\run_single_stream.bat" (
-copy "%ROOT_DIR%\run_single_stream.bat" "%PACKAGE_DIR%" /Y
-echo [INFO] Copied run_single_stream.bat
+:: 7. go2rtc (video server, MIT license). go2rtc.yaml is generated at service start, so it is not copied
+if exist "%ROOT_DIR%go2rtc\go2rtc.exe" (
+mkdir "%PACKAGE_DIR%\go2rtc"
+copy "%ROOT_DIR%go2rtc\go2rtc.exe" "%PACKAGE_DIR%\go2rtc" /Y
+copy "%ROOT_DIR%go2rtc\LICENSE.txt" "%PACKAGE_DIR%\go2rtc" /Y
+echo [INFO] Copied go2rtc
 ) else (
-echo [ERROR] run_single_stream.bat not found. Aborting script.
+echo [ERROR] go2rtc\go2rtc.exe not found. Aborting script.
 exit /b 1
 )
-
-:: 8. HLS 스트리밍 폴더 생성
-mkdir "%PACKAGE_DIR%\hls"
-echo [INFO] hls folder created.
 
 :: 9. cloudflare 터널생성
 echo ---------------------------------------------

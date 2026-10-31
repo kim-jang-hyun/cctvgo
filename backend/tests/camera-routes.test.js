@@ -19,10 +19,11 @@ function fakeStreams() {
         calls,
         fail: false,
         gate: null,
-        async add(url) { calls.push(['add', url]); if (this.gate) await this.gate; if (this.fail) throw new Error('x'); return 9; },
-        async restart(oldUrl, url) { calls.push(['restart', oldUrl, url]); if (this.fail) throw new Error('x'); },
+        async add(url, subUrl) { calls.push(subUrl ? ['add', url, subUrl] : ['add', url]); if (this.gate) await this.gate; if (this.fail) throw new Error('x'); return 9; },
+        async restart(oldUrl, url, subUrl) { calls.push(subUrl ? ['restart', oldUrl, url, subUrl] : ['restart', oldUrl, url]); if (this.fail) throw new Error('x'); },
         async remove(url) { calls.push(['remove', url]); if (this.fail) throw new Error('x'); },
-        streamUrls(urls) { return urls.map((u, i) => `/hls/stream${i + 7}/stream${i + 7}.m3u8`); },
+        epoch: 'E9',
+        streamIds(urls) { return urls.map((u, i) => (i === 1 ? null : i + 7)); },
     };
 }
 
@@ -35,7 +36,7 @@ async function startApp({ deps = {}, cctvText = TWO, noFile = false } = {}) {
     app.use(express.json());
     app.use(session({ secret: 'test', resave: false, saveUninitialized: true }));
     const authMiddleware = (req, res, next) => (req.headers['x-test-auth'] === 'ok' ? next() : res.redirect('/login'));
-    registerFinderRoutes(app, { authMiddleware, baseDir: dir, cctvPath, streams, deps, budget: new AuthBudget() });
+    registerFinderRoutes(app, { authMiddleware, baseDir: dir, cctvPath, streams, deps });
     const server = await new Promise(resolve => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
     const base = `http://127.0.0.1:${server.address().port}`;
     let cookie = '';
@@ -76,14 +77,15 @@ test('옛 /api/finder/cameras, /api/finder/save 는 없다', async () => {
     } finally { await app.close(); }
 });
 
-test('get-channel-list: 이름 없는 줄은 카메라 N, url 은 streams.streamUrls 값', async () => {
+test('get-channel-list: 이름 없는 줄은 카메라 N, stream 은 streams.streamIds 값 (영상 주소 대신 카메라 번호)', async () => {
     const app = await startApp({ cctvText: 'rtsp://a:b@192.168.0.5:554/x, 거실\r\nrtsp://a:b@192.168.0.6:554/y' });
     try {
         const body = await (await app.call('GET', '/api/get-channel-list')).json();
         assert.equal(body.status, 'success');
+        assert.equal(body.epoch, 'E9');
         assert.deepEqual(body.channels, [
-            { name: '거실', url: '/hls/stream7/stream7.m3u8' },
-            { name: '카메라 2', url: '/hls/stream8/stream8.m3u8' },
+            { name: '거실', stream: 7 },
+            { name: '카메라 2', stream: null },
         ]);
     } finally { await app.close(); }
 });
@@ -353,5 +355,89 @@ test('probe rtspUrl: 주소의 계정보다 본문 계정이 우선하고, 특�
         const pub = await app.call('POST', '/api/finder/probe', { rtspUrl: 'rtsp://8.8.8.8/live' });
         assert.equal(pub.status, 400);
         assert.equal(seen.length, 2);
+    } finally { await app.close(); }
+});
+
+// --- 서브 스트림 주소 ---
+const MAIN5 = 'rtsp://admin:secret@192.168.0.7:554/onvif1';
+const SUB5 = 'rtsp://admin:secret@192.168.0.7:554/onvif2';
+
+test('POST /api/cameras: 서브 주소를 함께 저장하고 streams.add(url, subUrl)', async () => {
+    const app = await startApp();
+    try {
+        const res = await app.call('POST', '/api/cameras', { url: MAIN5, name: '마당', subUrl: SUB5 });
+        assert.equal(res.status, 200);
+        const cam = app.cams()[2];
+        assert.equal(cam.url, MAIN5);
+        assert.equal(cam.subUrl, SUB5);
+        assert.deepEqual(app.streams.calls, [['add', MAIN5, SUB5]]);
+    } finally { await app.close(); }
+});
+
+test('POST /api/cameras: 다른 카메라(IP)의 서브 주소나 잘못된 서브 주소는 400', async () => {
+    const app = await startApp();
+    const before = app.read();
+    try {
+        for (const subUrl of ['rtsp://admin:secret@192.168.0.8:554/onvif2', 'http://192.168.0.7/x', 'rtsp://a:b@192.168.0.7:554/x, y', 123]) {
+            const res = await app.call('POST', '/api/cameras', { url: MAIN5, name: '마당', subUrl });
+            assert.equal(res.status, 400, String(subUrl));
+        }
+        assert.equal(app.read(), before);
+        assert.deepEqual(app.streams.calls, []);
+    } finally { await app.close(); }
+});
+
+test('edit: 계정을 바꾸면 기존 서브 주소의 계정도 함께 바꾼다', async () => {
+    const app = await startApp({
+        cctvText: `${MAIN5}, 마당, ${SUB5}
+`,
+        deps: { findStream: async () => found('rtsp://admin:new@192.168.0.7:554/onvif1') },
+    });
+    try {
+        const before = app.cams();
+        const res = await app.call('POST', '/api/cameras/0/edit', { hash: before[0].hash, username: 'admin', password: 'new' });
+        assert.deepEqual(await res.json(), { status: 'saved', applied: true });
+        const after = app.cams()[0];
+        assert.equal(after.url, 'rtsp://admin:new@192.168.0.7:554/onvif1');
+        assert.equal(after.subUrl, 'rtsp://admin:new@192.168.0.7:554/onvif2');
+        assert.deepEqual(app.streams.calls, [['restart', MAIN5, 'rtsp://admin:new@192.168.0.7:554/onvif1', 'rtsp://admin:new@192.168.0.7:554/onvif2']]);
+    } finally { await app.close(); }
+});
+
+test('edit: 찾은 후보에 서브 주소가 있으면 그 주소를 쓴다', async () => {
+    const newSub = 'rtsp://admin:new@192.168.0.5:554/x2';
+    const app = await startApp({
+        deps: { findStream: async () => ({ status: 'found', candidates: [{ url: 'rtsp://admin:new@192.168.0.5:554/x', label: 'main', subUrl: newSub }], tried: [], diagnostics: '' }) },
+    });
+    try {
+        const before = app.cams();
+        await app.call('POST', '/api/cameras/0/edit', { hash: before[0].hash, username: 'admin', password: 'new' });
+        assert.equal(app.cams()[0].subUrl, newSub);
+    } finally { await app.close(); }
+});
+
+test('edit: 이름만 바꾸면 서브 주소가 지워지지 않는다', async () => {
+    const app = await startApp({ cctvText: `${MAIN5}, 마당, ${SUB5}
+` });
+    try {
+        const before = app.cams();
+        await app.call('POST', '/api/cameras/0/edit', { hash: before[0].hash, name: '뒷마당' });
+        const after = app.cams()[0];
+        assert.equal(after.name, '뒷마당');
+        assert.equal(after.subUrl, SUB5);
+    } finally { await app.close(); }
+});
+
+test('edit: 한 번의 수정 요청 안의 두 탐색은 같은 예산을 쓰고(합쳐서 최대 2회), 다음 요청은 새 예산', async () => {
+    const budgets = [];
+    const app = await startApp({ deps: { findStream: async a => { budgets.push(a.budget); return a.path ? { status: 'path_not_found', tried: [], diagnostics: '' } : { status: 'auth_failed', tried: [], diagnostics: '' }; } } });
+    try {
+        for (let i = 0; i < 2; i++) {
+            const cam = app.cams()[0];
+            await app.call('POST', '/api/cameras/0/edit', { hash: cam.hash, username: 'admin', password: 'x' + i });
+        }
+        assert.equal(budgets.length, 4);
+        assert.equal(budgets[0], budgets[1]);
+        assert.notEqual(budgets[1], budgets[2]);
     } finally { await app.close(); }
 });
