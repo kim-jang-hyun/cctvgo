@@ -22,7 +22,7 @@
       <label>카메라 비밀번호</label>
       <input v-model="password" type="password" autocomplete="off" placeholder="바꾸지 않으려면 비워 두세요" @keyup.enter="save" />
       <p class="notice">아이디나 비밀번호를 바꾸면 카메라에 다시 접속해 확인합니다.</p>
-      <p class="notice warn">{{ LOGIN_WARNING }}</p>
+      <LoginWarning />
       <p v-if="saveError" class="error">{{ saveError }}</p>
       <div class="row">
         <router-link to="/cameras" class="btn">취소</router-link>
@@ -52,7 +52,8 @@
 
     <!-- 4. 실패 -->
     <section v-else-if="step === 'failed'" class="card">
-      <p class="error">{{ failMessage }}</p>
+      <FailMessage :text="failMessage" />
+      <LoginWarning v-if="needsLoginWarning(lastResult)" />
       <p class="muted">카메라 설정은 바뀌지 않았습니다.</p>
       <div class="row wrap">
         <button @click="step = 'form'">다시 입력</button>
@@ -78,7 +79,9 @@
 import { ref, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { api } from '../api';
-import { messageFor, APPLY_FAILED, LOGIN_WARNING } from '../finder-messages';
+import { messageFor, needsLoginWarning, APPLY_FAILED } from '../finder-messages';
+import LoginWarning from '../components/LoginWarning.vue';
+import FailMessage from '../components/FailMessage.vue';
 
 const route = useRoute();
 const index = Number(route.params.index);
@@ -92,6 +95,7 @@ const password = ref('');
 const candidates = ref([]);
 const selected = ref(0);
 const failMessage = ref('');
+const lastResult = ref(null);   // 실패한 확인 결과 (로그인 실패면 경고 상자를 함께 보여 준다)
 const diagnostics = ref('');
 const saveError = ref('');
 const applied = ref(true);
@@ -108,6 +112,7 @@ async function load() {
     step.value = 'form';
   } catch (e) {
     failMessage.value = e.message;
+    lastResult.value = null;
     step.value = 'missing';
   }
 }
@@ -131,6 +136,7 @@ async function save() {
   } catch (e) {
     if (e.status === 409 && /목록이 바뀌었습니다/.test(e.message)) {
       failMessage.value = e.message;
+      lastResult.value = null;
       step.value = 'missing';
       return;
     }
@@ -145,6 +151,7 @@ async function save() {
     step.value = 'choose';
     return;
   }
+  lastResult.value = r;
   failMessage.value = messageFor(r, '', 'edit');
   diagnostics.value = r.diagnostics || '';
   step.value = 'failed';
@@ -180,7 +187,6 @@ onMounted(load);
 </script>
 
 <style scoped>
-.notice.warn { color: #b45309; font-weight: 600; }
 /* body/#app 이 overflow: hidden 이라 이 화면이 직접 스크롤해야 한다 (CameraFinder.vue 와 같은 이유) */
 .edit { height: 100dvh; overflow-y: auto; padding: 16px; box-sizing: border-box; text-align: left; color: #213547; }
 .edit > * { max-width: 560px; margin-left: auto; margin-right: auto; }

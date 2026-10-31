@@ -59,7 +59,7 @@
       <input v-model.trim="username" autocomplete="off" />
       <label>카메라 비밀번호</label>
       <input v-model="password" type="password" autocomplete="off" @keyup.enter="runProbe(false)" />
-      <p class="notice warn">{{ LOGIN_WARNING }}</p>
+      <LoginWarning />
       <div class="row">
         <button @click="reset">처음으로</button>
         <button class="primary" :disabled="!username" @click="runProbe(false)">주소 찾기</button>
@@ -94,7 +94,8 @@
 
     <!-- 5. 결과: 못 찾음 -->
     <section v-else-if="step === 'failed'" class="card">
-      <p class="error">{{ failMessage }}</p>
+      <FailMessage :text="failMessage" />
+      <LoginWarning v-if="needsLoginWarning(result)" />
       <div class="row wrap">
         <template v-if="origin === 'rtsp'">
           <button @click="step = 'select'">RTSP 주소 다시 입력</button>
@@ -150,7 +151,9 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { api } from '../api';
-import { messageFor, isAmbiguousAuth, maskedUrl, APPLY_FAILED, LOGIN_WARNING } from '../finder-messages';
+import { messageFor, isAmbiguousAuth, needsLoginWarning, maskedUrl, APPLY_FAILED } from '../finder-messages';
+import LoginWarning from '../components/LoginWarning.vue';
+import FailMessage from '../components/FailMessage.vue';
 
 // --- 상태 ---
 const step = ref('select');   // select | credentials | probing | result | failed | manual | saved
@@ -318,7 +321,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.notice.warn { color: #b45309; font-weight: 600; }
 /* body/#app 이 overflow: hidden 이라 이 화면이 직접 스크롤해야 한다.
    body 배경은 항상 흰색이므로 글자색과 정렬도 #app 기본값 대신 직접 지정한다 */
 .finder { height: 100dvh; overflow-y: auto; padding: 16px; box-sizing: border-box; text-align: left; color: #213547; }
