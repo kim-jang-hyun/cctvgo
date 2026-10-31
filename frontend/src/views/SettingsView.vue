@@ -87,7 +87,7 @@ async function copyDiagnostics() {
 .menu-text strong { font-size: 15px; }
 .menu-desc { font-size: 13px; color: #777; }
 .chevron { font-size: 22px; color: #aaa; line-height: 1; }
-.diag { margin-top: 16px; padding: 14px 16px; background: #fff; border: 1px solid #ddd; border-radius: 8px; }
+.diag { box-sizing: border-box; margin-top: 16px; padding: 14px 16px; background: #fff; border: 1px solid #ddd; border-radius: 8px; }
 .diag-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .diag-desc { margin: 6px 0 0; font-size: 13px; color: #777; }
 .diag-error { margin: 6px 0 0; font-size: 13px; color: #c00; }
