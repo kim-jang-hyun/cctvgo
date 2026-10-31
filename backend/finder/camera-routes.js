@@ -10,7 +10,7 @@ const { parseCameras, parseRtspUrl, saveCameras, withCredentials } = require('./
  */
 
 function registerCameraRoutes(app, { authMiddleware, cctvPath, streams, shared }) {
-    const { budget, probingIps, probeLimiter, doFind, settings, keyOf } = shared;
+    const { newBudget, probingIps, probeLimiter, doFind, settings, keyOf } = shared;
     const writeLock = createLock();
     const writeLimiter = createRateLimiter({ max: 20, windowMs: 60 * 1000 });
 
@@ -160,7 +160,8 @@ function registerCameraRoutes(app, { authMiddleware, cctvPath, streams, shared }
         let result;
         try {
             // 비밀번호를 비워 두면 기존 비밀번호를 쓴다 (빈 비밀번호로 시도해 실패 횟수를 날리지 않도록)
-            const base = { host: parts.host, username: newUser, password: password || parts.password, vendorHint: '', budget, settings: settings() };
+            // 이 수정 요청 안의 두 탐색(기존 경로 확인 → 전체 탐색)은 같은 예산을 쓴다 (합쳐서 실패 최대 2회)
+            const base = { host: parts.host, username: newUser, password: password || parts.password, vendorHint: '', budget: newBudget(), settings: settings() };
             // 지금 쓰는 포트/경로로 먼저 한 번만 확인하고, 경로를 못 찾았을 때만 전체 탐색한다
             result = await doFind({ ...base, port: parts.port, path: parts.path });
             if (result.status === 'path_not_found') result = await doFind(base);

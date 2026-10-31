@@ -9,13 +9,13 @@ export function messageFor(r, vendorHint = '') {
       if (r.authUnsupported) {
         return '이 카메라는 지원하지 않는 로그인 방식(Digest SHA-256 등)을 사용합니다. 카메라 설명서의 RTSP 주소를 "RTSP 주소 직접 입력"으로 넣어 주세요.';
       }
-      const wait = r.retryAfterSec > 0 ? ` ${lockedNotice(r.retryAfterSec)}` : '';
+      const wait = ` ${LOGIN_WARNING}`;
       return (r.ambiguous
         ? `아이디/비밀번호 또는 경로 문제일 수 있습니다.${vendor} 카메라 자체 웹페이지에서 로그인되는 아이디/비밀번호인지 먼저 확인하고, 안 되면 "주소 직접 입력"을 사용하세요.`
         : '카메라 아이디 또는 비밀번호가 맞지 않습니다. 카메라 자체 웹페이지에서 로그인되는 아이디/비밀번호인지 먼저 확인하세요.') + wait;
     }
     case 'auth_locked':
-      return `이 카메라는 최근 로그인 실패가 2회 쌓여 잠시 쉬는 중입니다. ${lockedNotice(r.retryAfterSec || 0)}`;
+      return `카메라 로그인에 실패했습니다. ${LOGIN_WARNING}`;
     case 'rtsp_disabled':
       return `카메라의 RTSP 기능이 꺼져 있는 것 같습니다.${vendor} 카메라 앱이나 자체 웹페이지의 설정(네트워크/스트리밍 등)에서 RTSP를 켠 뒤 다시 시도하세요.`;
     case 'path_not_found':
@@ -25,13 +25,8 @@ export function messageFor(r, vendorHint = '') {
   }
 }
 
-// 실패가 2회 쌓여 대기에 들어갔을 때의 안내. 다시 시도할 수 있는 시각도 함께 보여 준다
-export function lockedNotice(retryAfterSec) {
-  const min = Math.max(1, Math.ceil(retryAfterSec / 60));
-  const at = new Date(Date.now() + retryAfterSec * 1000).toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' });
-  return `카메라 자체 잠금을 막기 위해 약 ${min}분 뒤(${at}쯤)부터 다시 시도할 수 있습니다. `
-    + '그 사이 카메라 웹페이지에서 아이디/비밀번호를 확인해 두세요. 다른 카메라는 지금 바로 찾을 수 있습니다.';
-}
+// 로그인 실패 안내. CCTVGO 는 다시 시도를 막지 않으므로(2026-10-31 결정) 카메라가 잠길 수 있다는 것을 분명히 알린다
+export const LOGIN_WARNING = '카메라 아이디/비밀번호를 여러 번 틀리면 카메라가 이 PC의 접속을 잠가 녹화와 실시간 영상이 끊길 수 있습니다. 다시 시도하기 전에 카메라 자체 웹페이지에서 로그인되는 아이디/비밀번호인지 꼭 확인하세요.';
 
 // 화면에는 비밀번호를 가린 주소를 보여 준다
 export function maskedUrl(url) {

@@ -59,7 +59,7 @@
       <input v-model.trim="username" autocomplete="off" />
       <label>카메라 비밀번호</label>
       <input v-model="password" type="password" autocomplete="off" @keyup.enter="runProbe(false)" />
-      <p class="notice">카메라 자체 웹페이지에서 로그인되는 아이디/비밀번호인지 먼저 확인하세요. 카메라가 잠기지 않도록 로그인 실패가 2회 쌓이면 그 카메라는 30분 동안 다시 시도할 수 없습니다.</p>
+      <p class="notice warn">{{ LOGIN_WARNING }}</p>
       <div class="row">
         <button @click="reset">처음으로</button>
         <button class="primary" :disabled="!username" @click="runProbe(false)">주소 찾기</button>
@@ -148,7 +148,7 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { api } from '../api';
-import { messageFor, maskedUrl, APPLY_FAILED } from '../finder-messages';
+import { messageFor, maskedUrl, APPLY_FAILED, LOGIN_WARNING } from '../finder-messages';
 
 // --- 상태 ---
 const step = ref('select');   // select | credentials | probing | result | failed | manual | saved
@@ -316,6 +316,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.notice.warn { color: #b45309; font-weight: 600; }
 /* body/#app 이 overflow: hidden 이라 이 화면이 직접 스크롤해야 한다.
    body 배경은 항상 흰색이므로 글자색과 정렬도 #app 기본값 대신 직접 지정한다 */
 .finder { height: 100dvh; overflow-y: auto; padding: 16px; box-sizing: border-box; text-align: left; color: #213547; }

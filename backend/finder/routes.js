@@ -1,5 +1,4 @@
 'use strict';
-const path = require('path');
 const { isPrivateIPv4, AuthBudget, createRateLimiter, createLock } = require('./guard');
 const { parseRtspUrl } = require('./cctv-file');
 const { registerCameraRoutes } = require('./camera-routes');
@@ -12,7 +11,12 @@ const { findStream } = require('./find-stream');
  * 이 파일에서 요청 본문(비밀번호 포함)을 로그로 남기지 않는다.
  */
 
-function registerFinderRoutes(app, { authMiddleware, baseDir, cctvPath, streams, deps = {}, budget = new AuthBudget({ persistPath: path.join(baseDir, 'finder-budget.json') }) }) {
+/**
+ * 로그인 실패 예산은 탐색 요청(버튼 한 번)마다 새로 만든다. 한 번의 탐색 안에서는 실패를 최대 2회까지만 보내
+ * 틀린 비밀번호로 경로 후보 수십 개를 두드려 카메라가 잠기는 일을 막는다. 요청 사이의 30분 잠금은 없다
+ * (2026-10-31 운영자 결정: 화면 경고로 사용자에게 맡김).
+ */
+function registerFinderRoutes(app, { authMiddleware, baseDir, cctvPath, streams, deps = {}, newBudget = () => new AuthBudget() }) {
     const doScan = deps.scanNetwork || scanNetwork;
     const doFind = deps.findStream || findStream;
 
@@ -87,7 +91,7 @@ function registerFinderRoutes(app, { authMiddleware, baseDir, cctvPath, streams,
                 username: username || '',
                 password: password || '',
                 vendorHint: vendorHint || '',
-                budget,
+                budget: newBudget(),
                 settings: settings(),
             });
             res.json(result);
@@ -100,7 +104,7 @@ function registerFinderRoutes(app, { authMiddleware, baseDir, cctvPath, streams,
     });
 
     // 카메라 관리 API 는 인증 실패 예산과 탐색 중 IP 목록을 probe 와 함께 쓴다 (같은 카메라 잠금 방지)
-    registerCameraRoutes(app, { authMiddleware, cctvPath, streams, shared: { budget, probingIps, probeLimiter, doFind, settings, keyOf } });
+    registerCameraRoutes(app, { authMiddleware, cctvPath, streams, shared: { newBudget, probingIps, probeLimiter, doFind, settings, keyOf } });
 }
 
 module.exports = { registerFinderRoutes };

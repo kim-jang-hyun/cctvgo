@@ -36,7 +36,7 @@ async function startApp({ deps = {}, cctvText = TWO, noFile = false } = {}) {
     app.use(express.json());
     app.use(session({ secret: 'test', resave: false, saveUninitialized: true }));
     const authMiddleware = (req, res, next) => (req.headers['x-test-auth'] === 'ok' ? next() : res.redirect('/login'));
-    registerFinderRoutes(app, { authMiddleware, baseDir: dir, cctvPath, streams, deps, budget: new AuthBudget() });
+    registerFinderRoutes(app, { authMiddleware, baseDir: dir, cctvPath, streams, deps });
     const server = await new Promise(resolve => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
     const base = `http://127.0.0.1:${server.address().port}`;
     let cookie = '';
@@ -425,5 +425,19 @@ test('edit: 이름만 바꾸면 서브 주소가 지워지지 않는다', async 
         const after = app.cams()[0];
         assert.equal(after.name, '뒷마당');
         assert.equal(after.subUrl, SUB5);
+    } finally { await app.close(); }
+});
+
+test('edit: 한 번의 수정 요청 안의 두 탐색은 같은 예산을 쓰고(합쳐서 최대 2회), 다음 요청은 새 예산', async () => {
+    const budgets = [];
+    const app = await startApp({ deps: { findStream: async a => { budgets.push(a.budget); return a.path ? { status: 'path_not_found', tried: [], diagnostics: '' } : { status: 'auth_failed', tried: [], diagnostics: '' }; } } });
+    try {
+        for (let i = 0; i < 2; i++) {
+            const cam = app.cams()[0];
+            await app.call('POST', '/api/cameras/0/edit', { hash: cam.hash, username: 'admin', password: 'x' + i });
+        }
+        assert.equal(budgets.length, 4);
+        assert.equal(budgets[0], budgets[1]);
+        assert.notEqual(budgets[1], budgets[2]);
     } finally { await app.close(); }
 });

@@ -15,7 +15,7 @@ async function startApp(deps = {}, cctvText = '# c\r\nrtsp://admin:secret@192.16
     const app = express();
     app.use(express.json());
     const authMiddleware = (req, res, next) => (req.headers['x-test-auth'] === 'ok' ? next() : res.redirect('/login'));
-    registerFinderRoutes(app, { authMiddleware, baseDir: dir, cctvPath, deps, budget: new AuthBudget() });
+    registerFinderRoutes(app, { authMiddleware, baseDir: dir, cctvPath, deps });
     const server = await new Promise(resolve => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
     const base = `http://127.0.0.1:${server.address().port}`;
     const call = (method, url, body, auth = true) => fetch(base + url, {
@@ -134,24 +134,26 @@ test('probe: 아이디에 제어문자/따옴표가 있으면 400 이고 findStr
     } finally { await app.close(); }
 });
 
-test('기본 budget 은 baseDir 의 finder-budget.json 에 영속화된다 (주입한 budget 이 우선)', async () => {
+test('탐색마다 새 예산: 앞 요청의 실패가 다음 요청을 막지 않고(30분 잠금 없음), 잠금 파일을 만들지 않는다', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cctvgo-routes-'));
+    const seen = [];
     const app = express();
     app.use(express.json());
     registerFinderRoutes(app, {
         authMiddleware: (req, res, next) => next(),
         baseDir: dir,
         cctvPath: path.join(dir, 'cctv.txt'),
-        deps: { findStream: async a => { a.budget.recordFailure(a.host); return { status: 'auth_failed' }; } },
+        deps: { findStream: async a => { seen.push(a.budget.failures(a.host)); while (!a.budget.isExhausted(a.host)) a.budget.recordFailure(a.host); return { status: 'auth_failed' }; } },
     });
     const server = await new Promise(resolve => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
     try {
-        const res = await fetch(`http://127.0.0.1:${server.address().port}/api/finder/probe`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ip: '192.168.0.5' }),
-        });
-        assert.equal(res.status, 200);
-        const saved = JSON.parse(fs.readFileSync(path.join(dir, 'finder-budget.json'), 'utf8'));
-        assert.equal(saved['192.168.0.5'].count, 1);
-        assert.ok(!JSON.stringify(saved).includes('pw'));
+        for (let i = 0; i < 2; i++) {
+            const res = await fetch(`http://127.0.0.1:${server.address().port}/api/finder/probe`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ip: '192.168.0.5' }),
+            });
+            assert.equal(res.status, 200);
+        }
+        assert.deepEqual(seen, [0, 0]);
+        assert.equal(fs.existsSync(path.join(dir, 'finder-budget.json')), false);
     } finally { await new Promise(r => { server.close(r); server.closeAllConnections && server.closeAllConnections(); }); }
 });
