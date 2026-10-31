@@ -37,7 +37,7 @@ function buildDiagnostics(host, vendorHint, info, tried) {
 }
 
 async function findStream({
-    host, port, path, username = '', password = '', vendorHint = '', skipOnvif = false,
+    host, port, path, username = '', password = '', vendorHint = '',
     budget, settings, rtspPorts = RTSP_PORTS, rtspTimeoutMs = 2000, onvifTimeoutMs = 3000,
 }) {
     const tried = [];
@@ -45,8 +45,6 @@ async function findStream({
 
     const finish = (status, extra = {}) => {
         const result = { status, candidates: [], tried, diagnostics: buildDiagnostics(host, vendorHint, info, tried), ...extra };
-        // 화면이 "남은 시도 N회"를 보여 줄 수 있게 한다
-        result.remaining = budget.remaining(host);
         // 예산이 소진돼 끝난 경우 언제 다시 시도할 수 있는지 알려 준다
         if (status === 'auth_failed' && budget.isExhausted(host)) result.retryAfterSec = Math.ceil(budget.retryAfterMs(host) / 1000);
         return result;
@@ -121,16 +119,14 @@ async function findStream({
     }
 
     // --- 1) ONVIF (계정이 없으면 시도하지 않는다: 빈 계정도 카메라에는 로그인 실패로 보인다) ---
-    // skipOnvif: 직전에 ONVIF 로그인만 실패해 사용자가 같은 비밀번호로 다시 시도한 경우 (ONVIF 계정이 따로 있는 카메라)
-    const on = skipOnvif ? { status: 'skipped-retry' } : username
+    const on = username
         ? await onvif.getStreamUris({
             host, username, password, ports: settings.onvifPorts, servicePaths: settings.onvifServicePaths, timeoutMs: onvifTimeoutMs,
         })
         : { status: 'skipped' };
     info.onvif = on.status === 'ok' ? `응답함 (프로파일 ${on.uris.length}개)` : on.status === 'auth_failed' ? '응답함, 인증 실패'
-        : on.status === 'skipped' ? '시도 안 함 (계정 없음)' : on.status === 'skipped-retry' ? '시도 안 함 (같은 비밀번호로 다시 시도)'
-            : '응답 없음 또는 미지원';
-    if (on.status !== 'skipped' && on.status !== 'skipped-retry') tried.push({ kind: 'onvif', target: host, result: on.status });
+        : on.status === 'skipped' ? '시도 안 함 (계정 없음)' : '응답 없음 또는 미지원';
+    if (on.status !== 'skipped') tried.push({ kind: 'onvif', target: host, result: on.status });
 
     if (on.status === 'ok') {
         const verified = [];
@@ -154,10 +150,8 @@ async function findStream({
         });
         if (verified.length) return finish('found', { candidates: withSubs });
     } else if (on.status === 'auth_failed') {
-        // 비밀번호 오류이거나, ONVIF 계정이 따로 있는 카메라다. 여기서 RTSP 로 더 시도하면 실수 한 번에 2회를 써서
-        // 바로 30분 잠금이 된다. 실패 1회로 멈추고, 비밀번호가 맞다면 같은 비밀번호로 다시 시도(skipOnvif)하게 한다
         budget.recordFailure(host);
-        return finish('auth_failed', { ambiguous: true, onvifOnly: !budget.isExhausted(host) });
+        if (budget.isExhausted(host)) return finish('auth_failed', { ambiguous: false });
     }
 
     // --- 2) 경로 후보 ---

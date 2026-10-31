@@ -155,14 +155,3 @@ test('기본 budget 은 baseDir 의 finder-budget.json 에 영속화된다 (주�
         assert.ok(!JSON.stringify(saved).includes('pw'));
     } finally { await new Promise(r => { server.close(r); server.closeAllConnections && server.closeAllConnections(); }); }
 });
-
-test('probe: skipOnvif 는 true 일 때만 넘긴다 (같은 비밀번호로 다시 시도)', async () => {
-    const seen = [];
-    const app = await startApp({ findStream: async a => { seen.push(a.skipOnvif); return { status: 'path_not_found', candidates: [], tried: [], diagnostics: '' }; } });
-    try {
-        for (const skipOnvif of [true, false, 'yes', undefined]) {
-            await app.call('POST', '/api/finder/probe', { ip: '192.168.0.5', username: 'admin', password: 'pw', skipOnvif });
-        }
-        assert.deepEqual(seen, [true, false, false, false]);
-    } finally { await app.close(); }
-});

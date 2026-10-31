@@ -100,8 +100,6 @@
           <button @click="step = 'select'">RTSP 주소 다시 입력</button>
         </template>
         <template v-else>
-          <!-- ONVIF 로그인만 실패: 비밀번호가 맞다면 ONVIF 를 건너뛰고 RTSP 로 확인한다 (시도 횟수는 1회만 더 씀) -->
-          <button v-if="result && result.onvifOnly" class="primary" @click="runProbe(false, { skipOnvif: true })">같은 비밀번호로 다시 시도</button>
           <button @click="step = 'credentials'">아이디/비밀번호 다시 입력</button>
           <button @click="step = 'manual'">주소 직접 입력</button>
           <button @click="reset">처음으로</button>
@@ -239,13 +237,12 @@ async function probe(body) {
   return result.value;
 }
 
-async function runProbe(manual, { skipOnvif = false } = {}) {
+async function runProbe(manual) {
   const body = {
     ip: ip.value,
     username: username.value,
     password: password.value,
     vendorHint: vendorHint.value,
-    skipOnvif,
   };
   if (manual) {
     body.path = path.value;

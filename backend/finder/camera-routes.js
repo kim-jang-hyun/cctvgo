@@ -163,12 +163,7 @@ function registerCameraRoutes(app, { authMiddleware, cctvPath, streams, shared }
             const base = { host: parts.host, username: newUser, password: password || parts.password, vendorHint: '', budget, settings: settings() };
             // 지금 쓰는 포트/경로로 먼저 한 번만 확인하고, 경로를 못 찾았을 때만 전체 탐색한다
             result = await doFind({ ...base, port: parts.port, path: parts.path });
-            if (result.status === 'path_not_found') {
-                result = await doFind(base);
-                // 경로 확인에서 계정은 이미 맞았다(path_not_found). 그 뒤 ONVIF 만 실패했다면 ONVIF 계정이 따로 있는 카메라이므로
-                // ONVIF 를 건너뛰고 경로 후보로 다시 찾는다 (계정이 맞아 RTSP 시도는 로그인 실패로 세이지 않는다)
-                if (result.status === 'auth_failed' && result.onvifOnly) result = await doFind({ ...base, skipOnvif: true });
-            }
+            if (result.status === 'path_not_found') result = await doFind(base);
         } catch (error) {
             console.error('Camera edit probe failed:', error.message);
             return res.status(500).json({ status: 'error', message: '주소 찾기 중 오류가 발생했습니다.' });

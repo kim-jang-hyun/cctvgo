@@ -87,8 +87,6 @@ function registerFinderRoutes(app, { authMiddleware, baseDir, cctvPath, streams,
                 username: username || '',
                 password: password || '',
                 vendorHint: vendorHint || '',
-                // 직전에 ONVIF 로그인만 실패해 같은 비밀번호로 다시 시도하는 경우 ONVIF 를 건너뛴다 (시도 횟수를 늘리지 않음)
-                skipOnvif: body.skipOnvif === true,
                 budget,
                 settings: settings(),
             });
