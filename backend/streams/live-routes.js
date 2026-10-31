@@ -68,7 +68,8 @@ function registerLiveRoutes(app, { authMiddleware, streams, api, diag = { connec
             const codecMismatch = (r.ok && !answerHasVideo(r.body)) || (r.status === 500 && CODEC_MISMATCH_RE.test(r.body));
             if (!codecMismatch) {
                 record(false, variant, 'unavailable');
-                return res.status(502).json({ status: 'error', reason: 'unavailable', message: '카메라 영상을 가져오지 못했습니다.' });
+                // 5xx 는 쓰지 않는다: Cloudflare 가 5xx 응답을 자기 오류 페이지로 바꿔 화면이 이유를 읽지 못한다
+                return res.status(424).json({ status: 'error', reason: 'unavailable', message: '카메라 영상을 가져오지 못했습니다.' });
             }
         }
         record(false, null, 'codec');

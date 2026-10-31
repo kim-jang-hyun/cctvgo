@@ -186,3 +186,12 @@ test('원본/서브가 코덱 때문에 안 된 카메라는 다음 연결부터
         assert.equal(app.offers[0].name, 'cctvgo_k1');
     } finally { await app.close(); }
 });
+
+test('실패 응답은 5xx 를 쓰지 않는다 (Cloudflare 가 5xx 응답을 자기 오류 페이지로 바꿔 화면이 이유를 읽지 못함, 실기 발견)', async () => {
+    const app = await startApp({ variants: H265_CAM, replies: { cctvgo_k1: { ok: false, status: 500, body: 'streams: dial tcp 192.168.219.100:554: i/o timeout' } } });
+    try {
+        const res = await app.offer('/api/live/1/offer?epoch=E1&h265=0');
+        assert.ok(res.status < 500, String(res.status));
+        assert.equal((await res.json()).reason, 'unavailable');
+    } finally { await app.close(); }
+});
