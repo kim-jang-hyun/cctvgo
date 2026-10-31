@@ -7,6 +7,7 @@ const path = require('path');
 const { EventEmitter } = require('events');
 const { PassThrough } = require('stream');
 const { Go2rtcProcess, maskSecrets } = require('../streams/go2rtc-process');
+const { datedLogName } = require('../diagnostics/log-files');
 
 /** spawn 대신 쓰는 가짜 자식 프로세스. exit(code) 로 종료를 흉내 낸다 */
 function fakeSpawn() {
@@ -120,26 +121,15 @@ test('maskSecrets: 로그의 주소에서 아이디/비밀번호를 가린다', 
     assert.equal(maskSecrets('plain line'), 'plain line');
 });
 
-test('go2rtc 출력은 비밀번호를 가린 채 logs/go2rtc.log 에 남는다', async () => {
+test('go2rtc 출력은 비밀번호를 가린 채 날짜별 logs/go2rtc-YYYY-MM-DD.log 에 남는다', async () => {
     const t = setup();
     await t.p.start('x');
     t.children[0].stdout.write('INF url=rtsp://admin:secret@192.168.0.5:554/x\n');
     t.children[0].stderr.write('ERR rtsp://u:p@h/y\n');
     await new Promise(r => setTimeout(r, 50));
-    const log = fs.readFileSync(path.join(t.installDir, 'logs', 'go2rtc.log'), 'utf8');
+    const log = fs.readFileSync(path.join(t.installDir, 'logs', datedLogName('go2rtc')), 'utf8');
     assert.ok(log.includes('rtsp://***@192.168.0.5:554/x'));
     assert.ok(!log.includes('secret'));
     assert.ok(!log.includes('u:p@'));
-    t.p.stop();
-});
-
-test('go2rtc.log 가 5MB 를 넘으면 시작할 때 go2rtc.old.log 로 돌린다', async () => {
-    const t = setup();
-    fs.mkdirSync(path.join(t.installDir, 'logs'), { recursive: true });
-    fs.writeFileSync(path.join(t.installDir, 'logs', 'go2rtc.log'), Buffer.alloc(5 * 1024 * 1024 + 1));
-    await t.p.start('x');
-    assert.ok(fs.existsSync(path.join(t.installDir, 'logs', 'go2rtc.old.log')));
-    const fresh = path.join(t.installDir, 'logs', 'go2rtc.log');
-    assert.ok(!fs.existsSync(fresh) || fs.statSync(fresh).size < 1024);
     t.p.stop();
 });

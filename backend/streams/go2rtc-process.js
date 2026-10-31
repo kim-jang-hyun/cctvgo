@@ -3,12 +3,11 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const readline = require('readline');
+const { appendLog } = require('../diagnostics/log-files');
 
 const MAX_DELAY_MS = 30000;
 // 이만큼 살아 있었으면 정상 동작으로 보고 다시 띄우는 간격을 처음(1초)으로 돌린다
 const HEALTHY_MS = 60000;
-// go2rtc.log 는 계속 이어 쓰므로(7일 삭제 대상이 안 됨) 시작할 때 이 크기를 넘으면 go2rtc.old.log 로 돌린다
-const MAX_LOG_BYTES = 5 * 1024 * 1024;
 
 /** go2rtc 는 연결 오류 때 카메라 주소(아이디/비밀번호 포함)를 그대로 찍는다. 로그에 남기기 전에 가린다 */
 function maskSecrets(line) {
@@ -57,31 +56,14 @@ class Go2rtcProcess {
         }
         fs.mkdirSync(this.dir, { recursive: true });
         fs.writeFileSync(this.configPath, configText, 'utf8');
-        this._rotateLog();
         this._spawn();
-    }
-
-    get logPath() { return path.join(this.logDir, 'go2rtc.log'); }
-
-    _rotateLog() {
-        try {
-            if (fs.existsSync(this.logPath) && fs.statSync(this.logPath).size > MAX_LOG_BYTES) {
-                fs.renameSync(this.logPath, path.join(this.logDir, 'go2rtc.old.log'));
-            }
-        } catch (e) {
-            this.error(`[GO2RTC] 로그 정리 실패: ${e.message}`);
-        }
     }
 
     /** 자식의 출력을 줄 단위로 받아 비밀번호를 가린 뒤 로그 파일에 쓴다 */
     _pipeLog(stream) {
         if (!stream) return;
-        readline.createInterface({ input: stream }).on('line', line => {
-            try {
-                fs.mkdirSync(this.logDir, { recursive: true });
-                fs.appendFileSync(this.logPath, maskSecrets(line) + '\n', 'utf8');
-            } catch (e) { /* 로그 실패는 무시 */ }
-        });
+        // 날짜별 파일 (몇 달씩 켜 두어도 한 파일이 커지지 않고, 30일 지나면 지워진다)
+        readline.createInterface({ input: stream }).on('line', line => appendLog(this.logDir, 'go2rtc', maskSecrets(line)));
     }
 
     _spawn() {

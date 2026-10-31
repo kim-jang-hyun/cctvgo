@@ -6,6 +6,7 @@ const os = require('os');
 const path = require('path');
 const express = require('express');
 const { createDiag, maskIp } = require('../diagnostics/diag');
+const { datedLogName } = require('../diagnostics/log-files');
 const { registerDiagRoutes } = require('../diagnostics/routes');
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'cctvgo-diag-'));
@@ -22,7 +23,8 @@ test('connection: 한 줄 JSON 으로 남기고 IP 는 마스킹한다', () => {
     const dir = tmp();
     const d = createDiag({ logDir: dir, now: () => Date.UTC(2026, 9, 30, 1, 2, 3) });
     d.connection({ stage: 'signaling', k: 1, ok: true, variant: 'main', ip: '211.36.147.187', ua: 'UA' });
-    const lines = fs.readFileSync(path.join(dir, 'connections.log'), 'utf8').trim().split('\n');
+    // 날짜별 파일 (계속 이어 쓰는 로그가 몇 년씩 커지지 않게)
+    const lines = fs.readFileSync(path.join(dir, datedLogName('connections', new Date(Date.UTC(2026, 9, 30, 1, 2, 3)))), 'utf8').trim().split('\n');
     assert.equal(lines.length, 1);
     const e = JSON.parse(lines[0]);
     assert.equal(e.t, '2026-10-30T01:02:03.000Z');
@@ -51,7 +53,7 @@ test('event: 운용 기록을 남긴다', () => {
     const dir = tmp();
     const d = createDiag({ logDir: dir });
     d.event('go2rtc-exit', { code: 1 });
-    const e = JSON.parse(fs.readFileSync(path.join(dir, 'cctvgo-events.log'), 'utf8').trim());
+    const e = JSON.parse(fs.readFileSync(path.join(dir, datedLogName('cctvgo-events')), 'utf8').trim());
     assert.equal(e.kind, 'go2rtc-exit');
     assert.equal(e.code, 1);
 });

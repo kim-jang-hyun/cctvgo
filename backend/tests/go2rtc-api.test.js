@@ -99,3 +99,14 @@ test('waitReady: go2rtc 가 응답할 때까지 기다리고, 끝내 응답이 �
     const dead = new Go2rtcApi({ port: await getClosedPort(), username: 'u', password: 'p' });
     assert.equal(await dead.waitReady({ tries: 3, intervalMs: 10 }), false);
 });
+
+test('getStreams: 진단용으로 go2rtc 의 스트림 상태를 인증해서 받아 온다', async () => {
+    const s = await fakeServer((r, res) => { res.setHeader('Content-Type', 'application/json'); res.end('{"cctvgo_k1":{"producers":[]}}'); });
+    try {
+        const api = new Go2rtcApi({ port: s.port, username: 'u', password: 'p' });
+        assert.deepEqual(await api.getStreams(), { cctvgo_k1: { producers: [] } });
+        assert.equal(s.requests[0].method, 'GET');
+        assert.equal(new URL(s.requests[0].url, 'http://x').pathname, '/api/streams');
+        assert.equal(s.requests[0].headers.authorization, AUTH);
+    } finally { await s.close(); }
+});

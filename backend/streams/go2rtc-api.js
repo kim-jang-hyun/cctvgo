@@ -53,6 +53,13 @@ class Go2rtcApi {
         return false;
     }
 
+    /** 진단 파일용: 스트림별 연결 상태(받은 데이터, 시청자, 오류). 주소의 비밀번호는 진단 파일을 만들 때 가린다 */
+    async getStreams() {
+        const res = await this._request('GET', '/api/streams');
+        if (!res.ok) throw new Error(`go2rtc 상태 조회 실패 (${res.status})`);
+        return res.json();
+    }
+
     async ping() {
         try {
             const res = await this._request('GET', '/api');

@@ -17,9 +17,9 @@ echo =====================================================
 echo   기존 프로세스 정리 및 시스템 초기화 중...
 echo =====================================================
 
-:: --- [7일 이전 로그 삭제] ---
-:: logs 폴더 안에서 7일이 지난 .log 파일을 찾아 삭제합니다.
-forfiles /p "%LOG_DIR%" /m *.log /d -7 /c "cmd /c del @path" 2>nul
+:: --- [30일 이전 로그 삭제] ---
+:: logs 폴더 안에서 30일이 지난 .log 파일을 찾아 삭제합니다. (서비스도 하루에 한 번 같은 정리를 합니다)
+forfiles /p "%LOG_DIR%" /m *.log /d -30 /c "cmd /c del @path" 2>nul
 
 if %errorlevel% equ 0 (
     echo [시스템] 오래된 로그 정리 완료.
@@ -43,6 +43,12 @@ if exist "%LOG_DIR%\nosleep.pid" (
 )
 timeout /t 2 > nul
 echo 기존 프로세스 종료 완료.
+
+:: Keep each run's console log and tunnel log in their own files, so no single file grows for months.
+:: (Files older than 30 days are deleted above and by the service once a day.)
+for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd-HHmmss"') do set "RUN_TS=%%t"
+if exist "%LOG_DIR%\service.log" ren "%LOG_DIR%\service.log" "service-console-!RUN_TS!.log" >nul 2>&1
+if exist "%LOG_DIR%\tunnel.log" ren "%LOG_DIR%\tunnel.log" "tunnel-!RUN_TS!.log" >nul 2>&1
 echo.
 
 echo =====================================================
@@ -177,7 +183,9 @@ for /f "delims=" %%a in ('powershell -NoProfile -Command "$n = Get-Counter '\Net
 for /f "delims=" %%a in ('powershell -NoProfile -Command "$n = Get-Counter '\Network Interface(*)\Bytes Recv/sec' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty CounterSamples | Measure-Object -Property CookedValue -Sum; [Math]::Round(($n.Sum * 8) / 1MB, 2)"') do set NET_RECV=%%a
 
 :: [로그 파일 기록]
-echo [%date% %time%] CPU:!CPU_LOAD!%% ^| Mem:!FREE_MEM_MB!MB ^| Disk:!DISK_FREE!GB ^| Net:!NET_SENT!Mbps ^| Net:!NET_RECV!Mbps >> "%LOG_DIR%\resource_usage.log"
+:: One resource log file per day (a single file would grow for months)
+for /f "delims=" %%d in ('powershell -NoProfile -Command "Get-Date -Format yyyy-MM-dd"') do set "TODAY=%%d"
+echo [%date% %time%] CPU:!CPU_LOAD!%% ^| Mem:!FREE_MEM_MB!MB ^| Disk:!DISK_FREE!GB ^| Net:!NET_SENT!Mbps ^| Net:!NET_RECV!Mbps >> "%LOG_DIR%\resource_usage-!TODAY!.log"
 
 :: [화면 출력]
 echo.

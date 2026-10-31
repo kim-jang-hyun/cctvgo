@@ -14,12 +14,22 @@ function getTimestamp() {
     return `[${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${ms}]`;
 }
 
+// logs 폴더가 정해지면 날짜별 파일(service-YYYY-MM-DD.log)에도 쓴다. 패키지(설치판)에서는 화면 출력 대신 이 파일에만 쓴다:
+// cctvgo.bat 이 화면 출력을 파일 하나(service.log)로 받아 몇 달씩 이어 쓰면 지워지지 않고 계속 커지기 때문이다
+// (예상 못한 오류로 서비스가 죽을 때의 출력은 그대로 service.log 에 남는다)
+let serviceLogDir = null;
+const { appendLog } = require('./diagnostics/log-files');
+function writeServiceLog(print, line) {
+    if (serviceLogDir) appendLog(serviceLogDir, 'service', line);
+    if (!(serviceLogDir && process.pkg)) print(line);
+}
+
 console.log = (...args) => {
-    originalLog(getTimestamp() + (args[0]?.toString().startsWith('[') ? '' : ' ') + args.join(' '));
+    writeServiceLog(originalLog, getTimestamp() + (args[0]?.toString().startsWith('[') ? '' : ' ') + args.join(' '));
 };
 
 console.error = (...args) => {
-    originalError(getTimestamp() + " [ERROR] " + args.join(' '));
+    writeServiceLog(originalError, getTimestamp() + " [ERROR] " + args.join(' '));
 };
 // --- 타임스탬프 로그 설정 끝 ---
 
@@ -87,6 +97,15 @@ const { buildConfig, DEFAULT_PORTS } = require('./streams/go2rtc-config');
 const { parseCameras } = require('./finder/cctv-file');
 const { probeEncoders, encoderTemplate, transcodeSource, encoderList } = require('./streams/encoder-probe');
 const LOG_DIR = path.join(INSTALL_DIR, 'logs');
+serviceLogDir = LOG_DIR;
+// 30일 지난 로그 정리: 시작할 때와 하루에 한 번 (몇 달씩 재시작 없이 켜 두는 PC 가 많다)
+const { pruneLogs } = require('./diagnostics/log-files');
+const pruneOldLogs = () => {
+    const { deleted } = pruneLogs(LOG_DIR);
+    if (deleted.length) console.log(`[LOGS] 오래된 로그 ${deleted.length}개 정리`);
+};
+pruneOldLogs();
+setInterval(pruneOldLogs, 24 * 60 * 60 * 1000).unref();
 // 연결 실패·운용 기록 (logs 폴더에만 남기고, 설정 화면의 "진단 정보 복사"로 문의 때 받는다)
 const { createDiag } = require('./diagnostics/diag');
 const { checkEnvironment } = require('./diagnostics/environment');
@@ -135,7 +154,19 @@ registerFinderRoutes(app, { authMiddleware, baseDir: BASE_DIR, cctvPath: CCTV_CO
 const { registerLiveRoutes } = require('./streams/live-routes');
 registerLiveRoutes(app, { authMiddleware, streams, api: go2rtcApi, diag });
 const { registerDiagRoutes } = require('./diagnostics/routes');
-registerDiagRoutes(app, { authMiddleware, diag });
+// 진단 파일(zip): 고객이 문의할 때 이 파일 하나만 보내면 되게 한다 (비밀번호는 넣지 않음)
+const { buildBundle } = require('./diagnostics/bundle');
+const SERVICE_STARTED_AT = new Date().toISOString();
+registerDiagRoutes(app, {
+  authMiddleware, diag,
+  bundle: () => buildBundle({
+    logDir: LOG_DIR, cctvPath: CCTV_CONFIG_PATH, diagText: () => diag.text(), go2rtcStreams: () => go2rtcApi.getStreams(),
+    info: {
+      'CCTVGO 버전': require('./package.json').version, '서비스 시작': SERVICE_STARTED_AT, 'H.265 변환기': selectedEncoder || '없음',
+      '설치 폴더': INSTALL_DIR, 'Node': process.version, '카메라 번호 체계': streams.epoch,
+    },
+  }),
+});
 
 // 설정 화면 API (비밀번호 변경)
 const { registerSettingsRoutes } = require('./settings/routes');

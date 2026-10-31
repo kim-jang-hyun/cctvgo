@@ -27,9 +27,12 @@
     <section class="diag">
       <div class="diag-head">
         <strong>진단 정보</strong>
-        <button type="button" :disabled="loading" @click="copyDiagnostics">{{ copied ? '복사됨' : loading ? '불러오는 중...' : '진단 정보 복사' }}</button>
+        <div class="diag-actions">
+          <button type="button" class="primary" :disabled="downloading" @click="downloadBundle">{{ downloading ? '만드는 중...' : '진단 파일 받기' }}</button>
+          <button type="button" :disabled="loading" @click="copyDiagnostics">{{ copied ? '복사됨' : loading ? '불러오는 중...' : '진단 정보 복사' }}</button>
+        </div>
       </div>
-      <p class="diag-desc">외부에서 영상이 보이지 않으면 이 내용을 복사해 문의할 때 함께 보내 주세요.</p>
+      <p class="diag-desc">문제가 생기면 [진단 파일 받기]로 받은 zip 파일을 문의할 때 보내 주세요. 기록과 PC 정보가 들어 있고, 카메라와 로그인 비밀번호는 들어 있지 않습니다. (만드는 데 10~20초 걸립니다)</p>
       <p v-if="error" class="diag-error">{{ error }}</p>
       <textarea v-if="text" ref="textRef" readonly :value="text" rows="8" @focus="$event.target.select()"></textarea>
     </section>
@@ -45,6 +48,35 @@ const loading = ref(false);
 const copied = ref(false);
 const error = ref('');
 const textRef = ref(null);
+
+const downloading = ref(false);
+
+// 진단 파일(zip) 받기. 만드는 데 시간이 걸려 버튼에 진행 상태를 보여 주고, 받은 파일을 바로 저장한다
+async function downloadBundle() {
+  downloading.value = true;
+  error.value = '';
+  try {
+    const res = await fetch('/api/diagnostics/bundle');
+    if (res.redirected) throw new Error('로그인이 필요합니다. 다시 로그인한 뒤 시도하세요.');
+    if (!res.ok || !(res.headers.get('content-type') || '').includes('application/zip')) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.message || `진단 파일을 받지 못했습니다. (${res.status})`);
+    }
+    const name = (/filename="([^"]+)"/.exec(res.headers.get('content-disposition') || '') || [])[1] || 'cctvgo-diagnostics.zip';
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (e) {
+    error.value = e.message;
+  } finally {
+    downloading.value = false;
+  }
+}
 
 async function copyDiagnostics() {
   loading.value = true;
@@ -88,7 +120,10 @@ async function copyDiagnostics() {
 .menu-desc { font-size: 13px; color: #777; }
 .chevron { font-size: 22px; color: #aaa; line-height: 1; }
 .diag { box-sizing: border-box; margin-top: 16px; padding: 14px 16px; background: #fff; border: 1px solid #ddd; border-radius: 8px; }
-.diag-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.diag-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.diag-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.diag-actions .primary { background: #007bff; border-color: #007bff; color: #fff; }
+.diag-actions .primary:disabled { opacity: 0.6; }
 .diag-desc { margin: 6px 0 0; font-size: 13px; color: #777; }
 .diag-error { margin: 6px 0 0; font-size: 13px; color: #c00; }
 .diag textarea { width: 100%; margin-top: 8px; box-sizing: border-box; font-size: 12px; font-family: monospace; }
