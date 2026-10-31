@@ -35,7 +35,7 @@ class StreamManager {
         const n = streamNames(k);
         const out = { [n.main]: url };
         if (subUrl) out[n.sub] = subUrl;
-        const tr = this.transcodeSource(url);
+        const tr = this.transcodeSource(n.main);
         if (tr) out[n.h264] = tr;
         return out;
     }
@@ -140,7 +140,7 @@ class StreamManager {
         const n = streamNames(k);
         const list = [{ variant: 'main', name: n.main }];
         if (entry.subUrl) list.push({ variant: 'sub', name: n.sub });
-        if (this.transcodeSource(entry.url)) list.push({ variant: 'h264', name: n.h264 });
+        if (this.transcodeSource(n.main)) list.push({ variant: 'h264', name: n.h264 });
         return list;
     }
 }

@@ -22,8 +22,14 @@ function answerHasVideo(sdp) {
     return !/^a=(inactive|recvonly)\s*$/m.test(section);
 }
 
-function registerLiveRoutes(app, { authMiddleware, streams, api, diag = { connection() {} } }) {
+// 원본/서브가 코덱 때문에 안 됐던 카메라는 이 시간 동안 성공했던 단계부터 시도한다 (지나면 카메라 설정이 바뀌었을 수 있어 처음부터)
+const LEARN_TTL_MS = 10 * 60 * 1000;
+
+function registerLiveRoutes(app, { authMiddleware, streams, api, diag = { connection() {} }, now = Date.now }) {
     const sdpBody = express.text({ type: 'application/sdp', limit: '32kb' });
+    // "카메라 번호 + 브라우저의 H.265 지원 여부" → 성공한 단계(variant). 매번 원본·서브부터 시도하면 그때마다
+    // go2rtc 가 카메라에 새로 접속해 카메라 동시 접속이 몰리고 첫 화면도 늦어진다
+    const learned = new Map();
 
     app.post('/api/live/:k/offer', authMiddleware, sdpBody, async (req, res) => {
         if (!K_RE.test(req.params.k)) return res.status(400).json({ status: 'error', message: '카메라 번호가 올바르지 않습니다.' });
@@ -47,10 +53,15 @@ function registerLiveRoutes(app, { authMiddleware, streams, api, diag = { connec
             record(false, null, 'not_found');
             return res.status(404).json({ status: 'error', reason: 'not_found', message: '카메라를 찾을 수 없습니다.' });
         }
-        const tries = h265 ? all.filter(v => v.variant === 'main') : all;
+        const key = `${streams.epoch}:${k}:${h265 ? 1 : 0}`;
+        const memo = learned.get(key);
+        const startAt = memo && now() - memo.at < LEARN_TTL_MS ? Math.max(0, all.findIndex(v => v.variant === memo.variant)) : 0;
+        const tries = (h265 ? all.filter(v => v.variant === 'main') : all).slice(h265 ? 0 : startAt);
         for (const { variant, name } of tries) {
             const r = await api.offer(name, sdp);
             if (r.ok && answerHasVideo(r.body)) {
+                if (variant !== 'main') learned.set(key, { variant, at: now() });
+                else learned.delete(key);
                 record(true, variant, null);
                 return res.json({ status: 'success', sdp: r.body, variant });
             }

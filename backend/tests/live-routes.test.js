@@ -10,7 +10,7 @@ const answer = name => ({ ok: true, status: 201, body: `v=0 answer ${name}\r\nm=
 const AUDIO_ONLY = { ok: true, status: 201, body: 'v=0\r\nm=video 9 UDP/TLS/RTP/SAVPF 96\r\na=rtpmap:96 H264/90000\r\na=inactive\r\nm=audio 9 UDP/TLS/RTP/SAVPF 8\r\na=sendonly\r\n' };
 
 /** variants: k → [{variant, name}], replies: name → offer 결과 */
-async function startApp({ variants = {}, replies = {} } = {}) {
+async function startApp({ variants = {}, replies = {}, now } = {}) {
     const offers = [];
     const events = [];
     const api = { async offer(name, sdp) { offers.push({ name, sdp }); return replies[name] || { ok: false, status: 404, body: '' }; } };
@@ -18,7 +18,7 @@ async function startApp({ variants = {}, replies = {} } = {}) {
     const diag = { connection: e => events.push(e) };
     const app = express();
     const authMiddleware = (req, res, next) => (req.headers['x-test-auth'] === 'ok' ? next() : res.redirect('/login'));
-    registerLiveRoutes(app, { authMiddleware, streams, api, diag });
+    registerLiveRoutes(app, { authMiddleware, streams, api, diag, ...(now ? { now } : {}) });
     const server = await new Promise(resolve => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
     const base = `http://127.0.0.1:${server.address().port}`;
     const offer = (path, sdp = 'v=0 offer', auth = true, extra = {}) => fetch(base + path, {
@@ -164,4 +164,25 @@ test('영상 줄이 없거나 포트 0 인 답도 영상 없음으로 본다', a
             assert.equal((await (await app.offer('/api/live/1/offer?epoch=E1&h265=0')).json()).reason, 'codec');
         } finally { await app.close(); }
     }
+});
+
+test('원본/서브가 코덱 때문에 안 된 카메라는 다음 연결부터 바로 변환본으로 (카메라 접속을 줄이고 첫 화면을 빨리)', async () => {
+    let t = 1000;
+    const app = await startApp({ variants: H265_CAM, replies: { cctvgo_k1: MISMATCH, cctvgo_k1_sub: MISMATCH, cctvgo_k1_h264: answer('h') }, now: () => t });
+    try {
+        await app.offer('/api/live/1/offer?epoch=E1&h265=0');
+        app.offers.length = 0;
+        const body = await (await app.offer('/api/live/1/offer?epoch=E1&h265=0')).json();
+        assert.equal(body.variant, 'h264');
+        assert.deepEqual(app.offers.map(o => o.name), ['cctvgo_k1_h264']);
+        // H.265 를 받는 브라우저는 따로 기억한다 (원본부터)
+        app.offers.length = 0;
+        await app.offer('/api/live/1/offer?epoch=E1&h265=1');
+        assert.equal(app.offers[0].name, 'cctvgo_k1');
+        // 10분이 지나면 다시 원본부터 확인한다 (카메라 설정이 바뀌었을 수 있음)
+        t += 10 * 60 * 1000 + 1;
+        app.offers.length = 0;
+        await app.offer('/api/live/1/offer?epoch=E1&h265=0');
+        assert.equal(app.offers[0].name, 'cctvgo_k1');
+    } finally { await app.close(); }
 });

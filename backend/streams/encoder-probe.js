@@ -10,7 +10,8 @@ const { execFile } = require('child_process');
 
 const ENCODERS = ['h264_qsv', 'h264_nvenc', 'h264_amf', 'h264_mf'];
 const ENCODER_OPTS = {
-    h264_qsv: ['-look_ahead', '0'],
+    // async_depth 1: 프레임을 여러 장 모아 두지 않게 해 지연을 줄인다
+    h264_qsv: ['-look_ahead', '0', '-async_depth', '1'],
     h264_mf: ['-hw_encoding', '0', '-rate_control', 'cbr'],
 };
 // go2rtc 를 켜기 전에 시험하므로 영상이 늦게 뜨지 않게 짧게 둔다 (보통 1~2초면 성공 또는 실패한다)
@@ -49,10 +50,11 @@ function encoderTemplate(encoder) {
 
 /**
  * 변환본 소스. go2rtc 는 보안상 exec: 소스를 API 로 받지 않으므로(insecure producer) ffmpeg: 소스를 쓴다.
- * 변환은 go2rtc 가 위 템플릿으로 FFmpeg 를 실행하고, 결과를 자기 내부 RTSP(127.0.0.1)로 받는다
+ * 카메라 주소가 아니라 go2rtc 의 원본 스트림 이름을 넘겨, 변환이 카메라에 따로 접속하지 않고 원본 연결을 같이 쓰게 한다
+ * (카메라 동시 접속이 몰리면 변환이 몇 초씩 멈추던 문제, 실기 확인). 결과는 go2rtc 내부 RTSP(127.0.0.1)로 받는다
  */
-function transcodeSource(url) {
-    return `ffmpeg:${url}#video=h264`;
+function transcodeSource(mainStreamName) {
+    return `ffmpeg:${mainStreamName}#video=h264`;
 }
 
 module.exports = { ENCODERS, encoderList, probeEncoders, encoderTemplate, transcodeSource };

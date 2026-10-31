@@ -36,10 +36,10 @@ test('initialStreams: 1..N 번호를 배정하고 서브가 있으면 _sub 도 �
     assert.deepEqual(mgr.streamIds([A, B]), [1, 2]);
 });
 
-test('initialStreams: 변환원이 있으면 _h264 도 만든다', () => {
-    const { mgr } = setup({ transcodeSource: url => `exec:ffmpeg -i ${url} {output}` });
+test('initialStreams: 변환원이 있으면 _h264 도 만든다 (변환원은 원본 스트림 이름을 받는다)', () => {
+    const { mgr } = setup({ transcodeSource: name => `ffmpeg:${name}#video=h264` });
     const s = mgr.initialStreams([{ url: A, subUrl: null }]);
-    assert.equal(s.cctvgo_k1_h264, `exec:ffmpeg -i ${A} {output}`);
+    assert.equal(s.cctvgo_k1_h264, 'ffmpeg:cctvgo_k1#video=h264');
 });
 
 test('add: 다음 번호를 돌려주고 그 카메라 이름만 PUT 한다', async () => {
@@ -130,9 +130,9 @@ test('variantsOf: 원본 → 서브 → 변환본 순서, 없는 것은 빠진�
 test('setTranscodeSource 뒤 resync: 모든 카메라에 변환본을 더한다', async () => {
     const { mgr, calls } = setup();
     mgr.initialStreams([{ url: A }]);
-    mgr.setTranscodeSource(url => `exec:${url}`);
+    mgr.setTranscodeSource(name => `ffmpeg:${name}#video=h264`);
     await mgr.resync();
-    assert.deepEqual(calls, [['put', 'cctvgo_k1', A], ['put', 'cctvgo_k1_h264', `exec:${A}`]]);
+    assert.deepEqual(calls, [['put', 'cctvgo_k1', A], ['put', 'cctvgo_k1_h264', 'ffmpeg:cctvgo_k1#video=h264']]);
 });
 
 test('로그에 카메라 주소(비밀번호)를 남기지 않는다', async () => {

@@ -45,12 +45,15 @@ test('encoderList: CCTVGO_ENCODERS 로 시험 목록을 바꿀 수 있고, 모�
 });
 
 test('encoderTemplate: go2rtc h264 템플릿 (변환기별 옵션 + 4Mbps, GOP 20, B프레임 없음)', () => {
-    assert.equal(encoderTemplate('h264_qsv'), '-c:v h264_qsv -look_ahead 0 -b:v 4M -g 20 -bf 0');
+    assert.equal(encoderTemplate('h264_qsv'), '-c:v h264_qsv -look_ahead 0 -async_depth 1 -b:v 4M -g 20 -bf 0');
     assert.equal(encoderTemplate('h264_mf'), '-c:v h264_mf -hw_encoding 0 -rate_control cbr -b:v 4M -g 20 -bf 0');
     assert.equal(encoderTemplate('h264_nvenc'), '-c:v h264_nvenc -b:v 4M -g 20 -bf 0');
 });
 
-test('transcodeSource: exec 가 아닌 ffmpeg 소스 (go2rtc 는 API 로 exec 소스를 받지 않는다), 주소 인코딩은 그대로', () => {
-    const url = 'rtsp://admin:dash1101%21@192.168.219.103:554/onvif1';
-    assert.equal(transcodeSource(url), `ffmpeg:${url}#video=h264`);
+test('transcodeSource: go2rtc 의 원본 스트림을 받아 변환한다 (카메라에 따로 접속하지 않음, exec 아님)', () => {
+    assert.equal(transcodeSource('cctvgo_k2'), 'ffmpeg:cctvgo_k2#video=h264');
+});
+
+test('encoderTemplate: Intel 변환은 프레임을 모아 두지 않는다 (지연 줄이기)', () => {
+    assert.match(encoderTemplate('h264_qsv'), /-async_depth 1/);
 });
