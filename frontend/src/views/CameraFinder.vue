@@ -100,8 +100,10 @@
           <button @click="step = 'select'">RTSP 주소 다시 입력</button>
         </template>
         <template v-else>
+          <!-- 비밀번호와 경로 문제를 구별할 수 없으면 비밀번호를 거듭 넣지 않도록 주소 직접 입력을 앞에 둔다 -->
+          <button v-if="isAmbiguousAuth(result)" class="primary" @click="step = 'manual'">주소 직접 입력</button>
           <button @click="step = 'credentials'">아이디/비밀번호 다시 입력</button>
-          <button @click="step = 'manual'">주소 직접 입력</button>
+          <button v-if="!isAmbiguousAuth(result)" @click="step = 'manual'">주소 직접 입력</button>
           <button @click="reset">처음으로</button>
         </template>
       </div>
@@ -148,7 +150,7 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { api } from '../api';
-import { messageFor, maskedUrl, APPLY_FAILED, LOGIN_WARNING } from '../finder-messages';
+import { messageFor, isAmbiguousAuth, maskedUrl, APPLY_FAILED, LOGIN_WARNING } from '../finder-messages';
 
 // --- 상태 ---
 const step = ref('select');   // select | credentials | probing | result | failed | manual | saved
@@ -219,7 +221,7 @@ function goCredentials() {
 }
 
 /** probe 를 실행하고, 못 찾으면 failed 단계로 보낸다. 찾았으면 결과를 돌려준다 */
-async function probe(body) {
+async function probe(body, context = 'scan') {
   step.value = 'probing';
   try {
     result.value = await api('/api/finder/probe', { method: 'POST', body: JSON.stringify(body) });
@@ -230,7 +232,7 @@ async function probe(body) {
     return null;
   }
   if (result.value.status !== 'found') {
-    failMessage.value = messageFor(result.value, vendorHint.value);
+    failMessage.value = messageFor(result.value, vendorHint.value, context);
     step.value = 'failed';
     return null;
   }
@@ -248,7 +250,7 @@ async function runProbe(manual) {
     body.path = path.value;
     if (port.value) body.port = port.value;
   }
-  if (!(await probe(body))) return;
+  if (!(await probe(body, manual ? 'manual' : 'scan'))) return;
   selected.value = 0;
   saveError.value = '';
   step.value = 'result';
@@ -257,7 +259,7 @@ async function runProbe(manual) {
 async function runRtspProbe() {
   origin.value = 'rtsp';
   vendorHint.value = '';
-  const r = await probe({ rtspUrl: rtspUrl.value, username: rtspUser.value, password: rtspPassword.value });
+  const r = await probe({ rtspUrl: rtspUrl.value, username: rtspUser.value, password: rtspPassword.value }, 'manual');
   if (!r) return;
   saveError.value = '';
   const ok = await save(r.candidates[0], rtspName.value);
@@ -344,7 +346,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .muted { color: #777; font-size: 13px; margin: 0; }
 .desc { margin: 0 0 4px; }
 .notice { background: #fff8e1; border: 1px solid #ffe08a; border-radius: 6px; padding: 8px; font-size: 13px; margin: 4px 0; }
-.error { color: #c62828; margin: 4px 0; word-break: keep-all; }
+.error { color: #c62828; margin: 4px 0; word-break: keep-all; white-space: pre-line; }
 .ok { color: #2e7d32; font-weight: 700; margin: 0; }
 .url { font-family: monospace; background: #f3f3f3; padding: 6px 8px; border-radius: 6px; word-break: break-all; }
 .radio { display: flex; gap: 8px; align-items: center; font-weight: 400; }

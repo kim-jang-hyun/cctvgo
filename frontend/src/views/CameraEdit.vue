@@ -145,7 +145,7 @@ async function save() {
     step.value = 'choose';
     return;
   }
-  failMessage.value = messageFor(r);
+  failMessage.value = messageFor(r, '', 'edit');
   diagnostics.value = r.diagnostics || '';
   step.value = 'failed';
 }
@@ -201,7 +201,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .muted { color: #777; font-size: 13px; margin: 0; }
 .desc { margin: 0 0 4px; }
 .notice { background: #fff8e1; border: 1px solid #ffe08a; border-radius: 6px; padding: 8px; font-size: 13px; margin: 4px 0; }
-.error { color: #c62828; margin: 4px 0; word-break: keep-all; }
+.error { color: #c62828; margin: 4px 0; word-break: keep-all; white-space: pre-line; }
 .ok { color: #2e7d32; font-weight: 700; margin: 0; }
 .url { font-family: monospace; font-size: 12px; color: #555; word-break: break-all; }
 .radio { display: flex; gap: 8px; align-items: center; font-weight: 400; }
