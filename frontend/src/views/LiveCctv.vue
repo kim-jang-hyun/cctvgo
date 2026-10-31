@@ -371,10 +371,11 @@ h2 {
   border-color: #007bff;
 }
 
+/* CCTV 는 가장자리(OSD 시계 등)가 잘리면 안 되므로 영상 전체를 보여 준다 (비율이 다르면 검은 여백) */
 .video-player {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .video-label {
