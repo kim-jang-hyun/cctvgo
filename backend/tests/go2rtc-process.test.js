@@ -133,3 +133,111 @@ test('go2rtc 출력은 비밀번호를 가린 채 날짜별 logs/go2rtc-YYYY-MM-
     assert.ok(!log.includes('u:p@'));
     t.p.stop();
 });
+
+test('설치 경로에 공백이 있어도 변환 프로그램을 찾게: pathDirs 를 go2rtc 의 PATH 앞에 넣는다 (go2rtc 는 ffmpeg.bin 을 공백에서 자른다)', async () => {
+    const t = setup();
+    const seen = [];
+    const orig = t.spawnImpl;
+    t.p.spawnImpl = (exe, args, opts) => { seen.push(opts); return orig(exe, args, opts); };
+    t.p.pathDirs = ['C:\Program Files\CCTVGO\ffmpeg\bin'];
+    await t.p.start('x');
+    const env = seen[0].env;
+    const keys = Object.keys(env).filter(k => k.toLowerCase() === 'path');
+    assert.equal(keys.length, 1, 'PATH 키는 하나만 (Windows 는 대소문자 구분 없음)');
+    assert.ok(env[keys[0]].startsWith('C:\Program Files\CCTVGO\ffmpeg\bin;'));
+    t.p.stop();
+});
+
+test('실행 자체가 실패(error)해도 다시 시도하고, 원인 추정과 함께 기록한다', async () => {
+    const t = setup();
+    await t.p.start('x');
+    const err = Object.assign(new Error('spawn EPERM'), { code: 'EPERM' });
+    t.children[0].emit('error', err);
+    t.children[0].emit('exit', null);   // error 뒤에 exit 가 와도 한 번만 처리
+    await tick(); await tick();
+    assert.equal(t.children.length, 2);
+    assert.deepEqual(t.delays, [1000]);
+    const ev = t.events.find(e => e.kind === 'go2rtc-start-failed');
+    assert.ok(ev);
+    assert.equal(ev.detail.code, 'EPERM');
+    assert.match(ev.detail.hint, /백신/);
+    t.p.stop();
+});
+
+test('go2rtc.exe 가 없으면 "파일 없음(백신 격리 의심)" 으로 기록한다', async () => {
+    const t = setup();
+    await t.p.start('x');
+    t.children[0].emit('error', Object.assign(new Error('spawn ENOENT'), { code: 'ENOENT' }));
+    await tick(); await tick();
+    const ev = t.events.find(e => e.kind === 'go2rtc-start-failed');
+    assert.equal(ev.detail.exeExists, false);
+    assert.match(ev.detail.hint, /go2rtc\.exe 가 없/);
+    t.p.stop();
+});
+
+test('spawn 이 바로 예외를 던져도 서비스가 죽지 않고 다시 시도한다', async () => {
+    const t = setup();
+    let first = true;
+    const orig = t.spawnImpl;
+    t.p.spawnImpl = (...a) => { if (first) { first = false; throw Object.assign(new Error('bad'), { code: 'EACCES' }); } return orig(...a); };
+    await t.p.start('x');
+    await tick(); await tick();
+    assert.equal(t.children.length, 1);
+    assert.ok(t.events.some(e => e.kind === 'go2rtc-start-failed' && e.detail.code === 'EACCES'));
+    t.p.stop();
+});
+
+test('계속 실패해도 기록은 처음 5번과 그 뒤 20번마다만 (운용 기록이 이것으로 덮이지 않게)', async () => {
+    const t = setup();
+    await t.p.start('x');
+    for (let i = 0; i < 40; i++) {
+        t.children[t.children.length - 1].emit('exit', 1);
+        await tick(); await tick();
+    }
+    const counts = t.events.filter(e => e.kind === 'go2rtc-exit').map(e => e.detail.failures);
+    assert.deepEqual(counts, [1, 2, 3, 4, 5, 20, 40]);
+    t.p.stop();
+});
+
+test('60초 넘게 잘 돌다 죽으면 실패 횟수를 처음부터 센다', async () => {
+    let clock = 0;
+    const t = setup();
+    t.p.now = () => clock;
+    await t.p.start('x');
+    t.children[0].emit('exit', 1);
+    await tick(); await tick();
+    clock = 120000;
+    t.children[1].emit('exit', 1);
+    await tick(); await tick();
+    assert.deepEqual(t.events.filter(e => e.kind === 'go2rtc-exit').map(e => e.detail.failures), [1, 1]);
+    assert.deepEqual(t.delays, [1000, 1000]);
+    t.p.stop();
+});
+
+test('다시 띄우기 전에 죽은 go2rtc 가 남긴 변환 FFmpeg(내부 RTSP 포트를 쓰는 것)만 정리한다', async () => {
+    const t = setup();
+    t.p.rtspPort = 8554;
+    await t.p.start('x');
+    t.killed.length = 0;
+    t.p.procs.listProcesses = async () => [
+        { pid: 11, commandLine: 'cctvgo-ffmpeg.exe -user_agent go2rtc/ffmpeg -i rtsp://127.0.0.1:8554/cctvgo_k1?video -f rtsp rtsp://127.0.0.1:8554/abc' },
+        { pid: 12, commandLine: 'cctvgo-ffmpeg.exe -user_agent go2rtc/ffmpeg -i rtsp://127.0.0.1:18554/x' },
+        { pid: 13, commandLine: '"C:\other\ffmpeg\bin\cctvgo-ffmpeg.exe" -i rtsp://192.168.0.5/x' },
+    ];
+    t.children[0].emit('exit', 1);
+    await tick(); await tick(); await tick(); await tick();
+    assert.deepEqual(t.killed, [11]);
+    assert.equal(t.children.length, 2);
+    t.p.stop();
+});
+
+test('stop: go2rtc 와 자식(변환 FFmpeg)까지 함께 끈다', async () => {
+    const t = setup();
+    const synced = [];
+    t.p.killTreeSync = pid => synced.push(pid);
+    await t.p.start('x');
+    t.children[0].pid = 4321;
+    t.p.stop();
+    assert.deepEqual(synced, [4321]);
+    assert.equal(t.children[0].killed, true);
+});

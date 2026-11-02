@@ -120,10 +120,11 @@ let selectedEncoder = null;
 const makeGo2rtcConfig = () => buildConfig({
   apiPort: DEFAULT_PORTS.api, rtspPort: DEFAULT_PORTS.rtsp, webrtcPort: DEFAULT_PORTS.webrtc, ...GO2RTC_AUTH,
   streams: streams.currentStreams(),
-  ffmpeg: selectedEncoder ? { bin: FFMPEG_PATH, h264: encoderTemplate(selectedEncoder) } : null,
+  // 전체 경로 대신 이름만: go2rtc 가 공백에서 경로를 잘라서, 폴더는 아래 pathDirs 로 PATH 에 넣는다
+  ffmpeg: selectedEncoder ? { bin: path.basename(FFMPEG_PATH), h264: encoderTemplate(selectedEncoder) } : null,
 });
 const go2rtc = new Go2rtcProcess({
-  installDir: INSTALL_DIR, logDir: LOG_DIR, event: diag.event, makeConfig: makeGo2rtcConfig,
+  installDir: INSTALL_DIR, logDir: LOG_DIR, event: diag.event, makeConfig: makeGo2rtcConfig, pathDirs: [path.dirname(FFMPEG_PATH)], rtspPort: DEFAULT_PORTS.rtsp,
   // 다시 뜬 go2rtc 가 API 를 열 때까지 기다린 뒤 다시 넣는다 (바로 보내면 연결이 거부된다)
   onRestart: async () => { await go2rtcApi.waitReady(); await streams.resync(); },
 });

@@ -10,10 +10,10 @@ const answer = name => ({ ok: true, status: 201, body: `v=0 answer ${name}\r\nm=
 const AUDIO_ONLY = { ok: true, status: 201, body: 'v=0\r\nm=video 9 UDP/TLS/RTP/SAVPF 96\r\na=rtpmap:96 H264/90000\r\na=inactive\r\nm=audio 9 UDP/TLS/RTP/SAVPF 8\r\na=sendonly\r\n' };
 
 /** variants: k → [{variant, name}], replies: name → offer 결과 */
-async function startApp({ variants = {}, replies = {}, now } = {}) {
+async function startApp({ variants = {}, replies = {}, now, alive = true } = {}) {
     const offers = [];
     const events = [];
-    const api = { async offer(name, sdp) { offers.push({ name, sdp }); return replies[name] || { ok: false, status: 404, body: '' }; } };
+    const api = { async offer(name, sdp) { offers.push({ name, sdp }); return replies[name] || { ok: false, status: 404, body: '' }; }, async ping() { return alive; } };
     const streams = { epoch: 'E1', variantsOf: k => variants[k] || [] };
     const diag = { connection: e => events.push(e) };
     const app = express();
@@ -193,5 +193,16 @@ test('실패 응답은 5xx 를 쓰지 않는다 (Cloudflare 가 5xx 응답을 �
         const res = await app.offer('/api/live/1/offer?epoch=E1&h265=0');
         assert.ok(res.status < 500, String(res.status));
         assert.equal((await res.json()).reason, 'unavailable');
+    } finally { await app.close(); }
+});
+
+test('go2rtc 자체가 응답하지 않으면(실행 안 됨) reason:media_server 로 구분한다', async () => {
+    const app = await startApp({ variants: H265_CAM, replies: { cctvgo_k1: { ok: false, status: 0, body: 'fetch failed' } }, alive: false });
+    try {
+        const res = await app.offer('/api/live/1/offer?epoch=E1&h265=0');
+        assert.equal(res.status, 424);
+        const body = await res.json();
+        assert.equal(body.reason, 'media_server');
+        assert.equal(app.events[0].reason, 'media_server');
     } finally { await app.close(); }
 });

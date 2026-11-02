@@ -67,6 +67,11 @@ function registerLiveRoutes(app, { authMiddleware, streams, api, diag = { connec
             }
             const codecMismatch = (r.ok && !answerHasVideo(r.body)) || (r.status === 500 && CODEC_MISMATCH_RE.test(r.body));
             if (!codecMismatch) {
+                // go2rtc 에 아예 닿지 않으면(실행 안 됨, 백신 차단 등) 카메라 문제와 구분해 알린다
+                if (r.status === 0 && !(await api.ping())) {
+                    record(false, variant, 'media_server');
+                    return res.status(424).json({ status: 'error', reason: 'media_server', message: '영상 서버가 실행되지 않고 있습니다.' });
+                }
                 record(false, variant, 'unavailable');
                 // 5xx 는 쓰지 않는다: Cloudflare 가 5xx 응답을 자기 오류 페이지로 바꿔 화면이 이유를 읽지 못한다
                 return res.status(424).json({ status: 'error', reason: 'unavailable', message: '카메라 영상을 가져오지 못했습니다.' });

@@ -68,7 +68,7 @@ function wentToLogin(res) {
 /**
  * video 요소에 카메라 k 의 영상을 연결한다. 끊기거나 실패하면 스스로 다시 연결한다(코덱 미지원은 다시 하지 않음).
  * epoch: 채널 목록에서 받은 번호 체계. 서비스가 다시 시작해 바뀌었으면 onStale() 을 부르고 멈춘다(화면이 목록을 다시 받는다).
- * onState(state, detail): 'connecting' | 'playing' | 'failed' (detail.reason: network | codec | camera | signaling | disconnected)
+ * onState(state, detail): 'connecting' | 'playing' | 'failed' (detail.reason: network | codec | camera | media_server | signaling | disconnected)
  * 반환값: 연결을 끊고 정리하는 함수
  */
 export function connectStream(video, k, { epoch = '', onState = () => {}, onStale = () => {} } = {}) {
@@ -179,7 +179,7 @@ export function connectStream(video, k, { epoch = '', onState = () => {}, onStal
         return;
       }
       if (data.status !== 'success') {
-        const reason = data.reason === 'codec' ? 'codec' : data.reason === 'unavailable' ? 'camera' : 'signaling';
+        const reason = data.reason === 'codec' ? 'codec' : data.reason === 'unavailable' ? 'camera' : data.reason === 'media_server' ? 'media_server' : 'signaling';
         return fail(reason, { status: res.status });
       }
       variant = data.variant;

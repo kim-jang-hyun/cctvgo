@@ -10,7 +10,7 @@ const { createZip } = require('./bundle');
  */
 
 const OUTCOMES = new Set(['playing', 'failed']);
-const REASONS = new Set(['network', 'codec', 'camera', 'signaling', 'disconnected']);
+const REASONS = new Set(['network', 'codec', 'camera', 'media_server', 'signaling', 'disconnected']);
 const VARIANTS = new Set(['main', 'sub', 'h264']);
 const CAND_TYPES = new Set(['host', 'srflx', 'prflx', 'relay']);
 const PROTOCOLS = new Set(['udp', 'tcp']);

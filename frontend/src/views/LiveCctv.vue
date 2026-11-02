@@ -88,6 +88,7 @@ const STATUS_TEXT = {
   disconnected: '연결이 끊겼습니다. 다시 연결하는 중...',
   codec: '이 브라우저에서는 이 카메라 영상(H.265)을 재생할 수 없습니다',
   camera: '카메라가 응답하지 않습니다',
+  media_server: '영상 서버가 실행되지 않고 있습니다. CCTVGO PC의 백신 프로그램을 확인해 주세요',
   signaling: '서버에 연결하지 못했습니다. 다시 시도하는 중...',
 };
 
