@@ -1,7 +1,9 @@
 'use strict';
 const fs = require('fs');
+const path = require('path');
 const { isPrivateIPv4, createRateLimiter, createLock } = require('./guard');
 const { parseCameras, parseRtspUrl, saveCameras, withCredentials } = require('./cctv-file');
+const { cameraKeys, resolveLayout, moveSlot, layoutVersion, loadLayout, saveLayout, gridColumns } = require('./layout');
 
 /**
  * 카메라 관리 API (목록/추가/수정/삭제) 와 영상 화면용 채널 목록.
@@ -18,6 +20,7 @@ function registerCameraRoutes(app, { authMiddleware, cctvPath, streams, shared }
     const conflict = (res, message) => res.status(409).json({ status: 'error', message });
     const tooMany = res => res.status(429).json({ status: 'error', message: '요청이 너무 많습니다. 잠시 후 다시 시도하세요.' });
     const readCameras = () => parseCameras(fs.existsSync(cctvPath) ? fs.readFileSync(cctvPath, 'utf8') : '');
+    const layoutPath = path.join(path.dirname(cctvPath), 'layout.json');
     const maskedUrl = url => url.replace(/^(rtsp:\/\/[^:@/]*):[^@]*@/, '$1:****@');
 
     function urlError(url) {
@@ -81,13 +84,42 @@ function registerCameraRoutes(app, { authMiddleware, cctvPath, streams, shared }
         }
     }
 
-    app.get('/api/get-channel-list', authMiddleware, (req, res) => {
+    /** 지금 cctv.txt 와 저장된 배치로 만든 칸 배치 (카메라 키 또는 null) */
+    function currentLayout(cameras) {
+        return resolveLayout(loadLayout(layoutPath), cameraKeys(cameras.map(c => c.url)));
+    }
+
+    /** 영상 화면용 목록: 영상 주소 대신 카메라 번호(stream)와 칸 번호(slot)를 준다. 화면은 이 번호로 /api/live/:k/offer 에 연결한다 */
+    function channelList(cameras, slots = currentLayout(cameras)) {
+        const ids = streams.streamIds(cameras.map(c => c.url));
+        const keys = cameraKeys(cameras.map(c => c.url));
+        const channels = cameras.map((c, i) => ({ name: c.name || `카메라 ${c.index + 1}`, stream: ids[i], slot: slots.indexOf(keys[i]) }));
+        return { epoch: streams.epoch, columns: gridColumns(cameras.length), layout: layoutVersion(slots), channels };
+    }
+
+    // 영상 칸 옮기기: from 칸의 카메라를 to 칸으로 (빈 칸이면 이동, 카메라가 있으면 맞바꿈). 영상은 건드리지 않는다.
+    // layout: 화면이 받은 배치 버전. 다른 기기에서 이미 바꿨으면 409 로 알려 화면이 목록을 다시 받게 한다
+    app.post('/api/layout/move', authMiddleware, (req, res) => {
+        if (!writeLimiter.allow(keyOf(req))) return tooMany(res);
+        const { from, to, layout } = req.body || {};
         try {
             const cameras = readCameras();
-            // 영상 주소 대신 카메라 번호(stream)를 준다. 화면은 이 번호로 /api/live/:k/offer 에 연결한다
-            const ids = streams.streamIds(cameras.map(c => c.url));
-            const channels = cameras.map((c, i) => ({ name: c.name || `카메라 ${c.index + 1}`, stream: ids[i] }));
-            res.json({ status: 'success', epoch: streams.epoch, channels });
+            const slots = currentLayout(cameras);
+            if (layout !== layoutVersion(slots)) return conflict(res, '다른 곳에서 배치가 바뀌었습니다.');
+            const next = moveSlot(slots, from, to);
+            if (!next) return bad(res, '옮길 수 없는 칸입니다.');
+            saveLayout(layoutPath, next);
+            console.log(`[LAYOUT] ${from + 1}번 칸 → ${to + 1}번 칸`);
+            res.json({ status: 'success', ...channelList(cameras, next) });
+        } catch (error) {
+            console.error('Layout save failed:', error.message);
+            res.status(500).json({ status: 'error', message: '배치 저장에 실패했습니다.' });
+        }
+    });
+
+    app.get('/api/get-channel-list', authMiddleware, (req, res) => {
+        try {
+            res.json({ status: 'success', ...channelList(readCameras()) });
         } catch (error) {
             console.error('Channel list failed:', error.message);
             res.status(500).json({ status: 'error', message: 'cctv.txt 를 읽을 수 없습니다.' });

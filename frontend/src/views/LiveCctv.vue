@@ -42,31 +42,49 @@
     </template>
 
     <!-- 데스크톱: 그리드 뷰 -->
-    <draggable
+    <!-- 칸을 끌어 다른 칸에 놓으면 이동(빈 칸) 또는 맞바꿈(카메라 있는 칸).
+         카메라 칸은 등록 순서로 고정해 두고 그리드 위치만 바꾼다 (요소를 옮기면 영상이 잠깐 멈출 수 있어서) -->
+    <div
       v-else-if="cameraList"
-      v-model="cameraList"
-      item-key="id"
       class="video-grid"
       :style="{ gridTemplateColumns: `repeat(${gridColumns}, 1fr)` }"
-      :sort="false"
     >
-      <template #item="{ element, index }">
-        <div class="video-container">
-          <div class="video-label">{{ element.name }}</div>
-          <div v-if="element.stream != null && statusText(element.id)" class="video-status">{{ statusText(element.id) }}</div>
-          <video
-            v-if="element.stream != null"
-            :ref="el => videoElements[index] = el"
-            class="video-player"
-            :data-index="index"
-            autoplay
-            muted
-            playsinline
-            controls
-          ></video>
-        </div>
-      </template>
-    </draggable>
+      <div
+        v-for="cam in cameraList"
+        :key="cam.id"
+        class="video-container"
+        :class="{ 'drop-target': dropSlot === cam.slot && dragFrom !== cam.slot, dragging: dragFrom === cam.slot }"
+        data-drop-text="자리 바꾸기"
+        :style="slotStyle(cam.slot)"
+        draggable="true"
+        @dragstart="onDragStart(cam.slot, $event)"
+        @dragend="onDragEnd"
+        @dragover.prevent="onDragOver(cam.slot)"
+        @drop.prevent="onDrop(cam.slot)"
+      >
+        <div class="video-label">{{ cam.name }}</div>
+        <div v-if="cam.stream != null && statusText(cam.id)" class="video-status">{{ statusText(cam.id) }}</div>
+        <video
+          v-if="cam.stream != null"
+          :ref="el => videoElements[cam.id] = el"
+          class="video-player"
+          autoplay
+          muted
+          playsinline
+          controls
+        ></video>
+      </div>
+      <div
+        v-for="slot in emptySlots"
+        :key="'empty' + slot"
+        class="video-container empty"
+        :class="{ 'drop-target': dropSlot === slot }"
+        data-drop-text="여기로 옮기기"
+        :style="slotStyle(slot)"
+        @dragover.prevent="onDragOver(slot)"
+        @drop.prevent="onDrop(slot)"
+      ></div>
+    </div>
   </div>
 </template>
 
@@ -74,8 +92,10 @@
 import { ref, reactive, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { connectStream } from '../webrtc';
 import { nextDownSince, isLongDown } from '../camera-down';
-import draggable from 'vuedraggable';
+import { useRouter } from 'vue-router';
 import SettingsIcon from '../components/SettingsIcon.vue';
+
+const router = useRouter();
 
 // --- 상수 ---
 const ROWS = 2;
@@ -97,9 +117,11 @@ const CAMERA_LONG_DOWN_TEXT = '카메라가 응답하지 않습니다.\n카메�
 const NOW_TICK_MS = 10 * 1000;
 
 // --- 상태 ---
-const cameraList = ref(null);
+const cameraList = ref(null);   // 등록 순서의 카메라 [{ id, name, stream, slot }] (칸 위치는 slot, 서버가 정한다)
+const columns = ref(MIN_COLUMNS);
 const error = ref(null);
 let epoch = '';   // 채널 목록의 번호 체계 (서비스가 다시 시작하면 바뀐다)
+let layout = '';   // 배치 버전 (다른 기기에서 배치를 바꿨는지 서버가 확인하는 값)
 let keepAliveTimer = null;
 let reloading = null;
 // 영상만 보고 있으면 HTTP 요청이 없어 로그인 세션(1시간)이 끝난다. 화면을 켜 두는 동안 주기적으로 목록을 받아 세션을 유지한다
@@ -111,7 +133,7 @@ const mobileVideoRef = ref(null);
 let mobileClose = null;
 
 const closers = [];   // 데스크톱 칸별 연결 정리 함수
-const videoElements = reactive([]);
+const videoElements = reactive({});   // 카메라 id → video 요소
 const status = reactive({});   // 카메라 id → { state, reason, downSince }
 const now = ref(Date.now());   // 오래 끊긴 칸 판단용 (연결 시도가 없어도 문구가 바뀌게)
 let nowTimer = null;
@@ -131,12 +153,23 @@ const watchState = (id, stream) => (state, detail = {}) => {
 };
 
 // --- computed ---
-const gridColumns = computed(() => {
-  const n = cameraList.value?.length ?? 0;
-  return n ? Math.max(MIN_COLUMNS, Math.ceil(n / ROWS)) : MIN_COLUMNS;
+const gridColumns = computed(() => columns.value);
+
+const emptySlots = computed(() => {
+  const used = new Set((cameraList.value || []).map(c => c.slot));
+  const out = [];
+  for (let i = 0; i < ROWS * columns.value; i++) if (!used.has(i)) out.push(i);
+  return out;
 });
 
-const camerasWithUrl = computed(() => (cameraList.value || []).filter(c => c?.stream != null));
+// 칸 번호는 왼쪽 위부터 줄 순서
+const slotStyle = slot => ({
+  gridRow: Math.floor(slot / columns.value) + 1,
+  gridColumn: (slot % columns.value) + 1,
+});
+
+// 휴대폰의 카메라 선택 순서도 칸 배치를 따른다
+const camerasWithUrl = computed(() => (cameraList.value || []).filter(c => c.stream != null).sort((a, b) => a.slot - b.slot));
 
 const currentMobileCamera = computed(
   () => camerasWithUrl.value[selectedMobileIndex.value] ?? null
@@ -161,6 +194,8 @@ const getCameraList = async () => {
     console.log('채널 리스트:', data.channels);
     channelList = data.channels || [];
     epoch = data.epoch || '';
+    layout = data.layout || '';
+    columns.value = data.columns || MIN_COLUMNS;
   } catch (err) {
     console.error('API call error:', err.message);
     error.value = err.message;
@@ -169,28 +204,85 @@ const getCameraList = async () => {
   return channelList;
 };
 
-// channels: [{ name, stream }] — 카메라 번호(stream)는 서버가 정한다 (카메라를 지워도 다른 카메라의 번호는 그대로라 순번으로 계산하면 안 된다)
+// channels: [{ name, stream, slot }] — 카메라 번호(stream)와 칸(slot)은 서버가 정한다 (카메라를 지워도 다른 카메라의 번호는 그대로라 순번으로 계산하면 안 된다)
 const initCameraList = (channels) => {
   if (error.value !== null) {
     console.error('initCameraList error: ', error.value);
     cameraList.value = [];
     return;
   }
-  const cameraCount = channels.length;
-  const columns = Math.max(MIN_COLUMNS, Math.ceil(cameraCount / ROWS));
-  const totalSlots = ROWS * columns;
-
-  cameraList.value = [];
-  for (let i = 0; i < totalSlots; i++) {
-    const hasCamera = i < cameraCount;
-    cameraList.value.push({
-      id: 'cam' + (i + 1),
-      name: hasCamera ? channels[i].name : null,
-      stream: hasCamera ? channels[i].stream : null,
-    });
-  }
-  console.log(`cameraList가 ${cameraCount}개(그리드 ${columns}x${ROWS}=${totalSlots}칸)로 초기화되었습니다.`, cameraList.value);
+  cameraList.value = channels.map((c, i) => ({ id: 'cam' + (i + 1), name: c.name, stream: c.stream, slot: c.slot ?? i }));
+  console.log(`cameraList가 ${channels.length}개(그리드 ${columns.value}x${ROWS})로 초기화되었습니다.`, cameraList.value);
 };
+
+/** 같은 카메라 목록이면 칸 위치만 바꾼다 (영상 연결은 그대로). 카메라가 바뀌었으면 false */
+function applyLayout(data) {
+  const list = cameraList.value || [];
+  const channels = data.channels || [];
+  const same = data.epoch === epoch && channels.length === list.length
+    && channels.every((c, i) => c.stream === list[i].stream && c.name === list[i].name);
+  if (!same) return false;
+  channels.forEach((c, i) => { list[i].slot = c.slot; });
+  columns.value = data.columns || columns.value;
+  layout = data.layout || '';
+  return true;
+}
+
+// --- 칸 끌어 놓기 ---
+const dragFrom = ref(null);
+const dropSlot = ref(null);
+
+function onDragStart(slot, e) {
+  dragFrom.value = slot;
+  try {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(slot));   // 파이어폭스는 데이터가 있어야 끌기가 시작된다
+  } catch (err) { /* 무시 */ }
+}
+
+function onDragOver(slot) {
+  if (dragFrom.value !== null) dropSlot.value = slot;
+}
+
+function onDragEnd() {
+  dragFrom.value = null;
+  dropSlot.value = null;
+}
+
+async function onDrop(to) {
+  const from = dragFrom.value;
+  onDragEnd();
+  if (from === null || from === to) return;
+  // 먼저 화면에서 옮겨 두고, 서버 결과로 맞춘다
+  const list = cameraList.value || [];
+  const moving = list.find(c => c.slot === from);
+  const other = list.find(c => c.slot === to);
+  if (!moving) return;
+  moving.slot = to;
+  if (other) other.slot = from;
+  try {
+    const res = await fetch('/api/layout/move', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ from, to, layout }),
+    });
+    if (res.redirected) { router.push('/login'); return; }
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.status === 'success' && applyLayout(data)) return;
+  } catch (err) {
+    console.error('Layout move failed:', err.message);
+  }
+  // 다른 곳에서 배치가 바뀌었거나 저장에 실패했으면 서버 배치로 되돌린다
+  await syncLayout();
+}
+
+/** 서버의 지금 배치를 받아 칸 위치만 맞춘다. 카메라 목록 자체가 바뀌었으면 다시 연결한다 */
+async function syncLayout() {
+  try {
+    const res = await fetch('/api/get-channel-list');
+    if (res.redirected) return;
+    const data = await res.json();
+    if (data.status === 'success' && !applyLayout(data)) reloadCameras();
+  } catch (e) { /* 다음 기회에 */ }
+}
 
 // --- WebRTC · 플레이어 ---
 function initMobilePlayer() {
@@ -220,8 +312,8 @@ function initPlayers() {
     mobileClose = null;
   }
 
-  cameraList.value.forEach((cam, index) => {
-    const video = videoElements[index];
+  cameraList.value.forEach(cam => {
+    const video = videoElements[cam.id];
     if (!video || cam.stream == null) return;
     closers.push(connectStream(video, cam.stream, { epoch, onState: watchState(cam.id, cam.stream), onStale: reloadCameras }));
   });
@@ -268,6 +360,7 @@ async function keepAlive() {
     if (res.redirected) return;   // 이미 세션이 끝났으면 다음 연결 시도에서 로그인 화면으로 간다
     const data = await res.json();
     if (data.epoch && data.epoch !== epoch) reloadCameras();
+    else if (data.layout && data.layout !== layout) applyLayout(data);   // 다른 기기에서 바꾼 배치 (영상은 그대로)
   } catch (e) { /* 다음 주기에 다시 */ }
 }
 
@@ -386,6 +479,36 @@ h2 {
 
 .video-container:hover {
   border-color: #007bff;
+}
+
+/* 끌어 놓을 칸 표시: 영상 위에서도 잘 보이게 두꺼운 테두리 + 반투명 덮개 + 안내 글자 */
+.video-container.drop-target::after {
+  content: attr(data-drop-text);
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 4px solid #2ecc71;
+  background: rgba(46, 204, 113, 0.3);
+  color: #fff;
+  font-size: 18px;
+  font-weight: bold;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+}
+
+.video-container.dragging {
+  opacity: 0.4;
+}
+
+.video-container.empty {
+  cursor: default;
+}
+
+.video-container.empty:hover {
+  border-color: transparent;
 }
 
 /* CCTV 는 가장자리(OSD 시계 등)가 잘리면 안 되므로 영상 전체를 보여 준다 (비율이 다르면 검은 여백) */

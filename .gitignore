@@ -5,6 +5,8 @@
 /backend/finder-budget.json
 /backend/finder-budget.json.tmp
 /backend/config.json.tmp
+/backend/layout.json
+/backend/layout.json.tmp
 
 /frontend/node_modules
 /frontend/dist

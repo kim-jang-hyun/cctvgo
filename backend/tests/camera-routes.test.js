@@ -62,7 +62,8 @@ test('로그인하지 않으면 /api/cameras 계열과 get-channel-list 가 막�
     const app = await startApp();
     try {
         for (const [m, u] of [['GET', '/api/get-channel-list'], ['GET', '/api/cameras'], ['POST', '/api/cameras'],
-            ['POST', '/api/cameras/0/edit'], ['POST', '/api/cameras/0/edit/confirm'], ['DELETE', '/api/cameras/0']]) {
+            ['POST', '/api/cameras/0/edit'], ['POST', '/api/cameras/0/edit/confirm'], ['DELETE', '/api/cameras/0'],
+            ['POST', '/api/layout/move']]) {
             const res = await app.call(m, u, m === 'GET' ? undefined : {}, false);
             assert.equal(res.status, 302, `${m} ${u}`);
         }
@@ -84,9 +85,11 @@ test('get-channel-list: 이름 없는 줄은 카메라 N, stream 은 streams.str
         assert.equal(body.status, 'success');
         assert.equal(body.epoch, 'E9');
         assert.deepEqual(body.channels, [
-            { name: '거실', stream: 7 },
-            { name: '카메라 2', stream: null },
+            { name: '거실', stream: 7, slot: 0 },
+            { name: '카메라 2', stream: null, slot: 1 },
         ]);
+        assert.equal(body.columns, 2);
+        assert.match(body.layout, /^[0-9a-f]{12}$/);
     } finally { await app.close(); }
 });
 
@@ -439,5 +442,58 @@ test('edit: 한 번의 수정 요청 안의 두 탐색은 같은 예산을 쓰�
         assert.equal(budgets.length, 4);
         assert.equal(budgets[0], budgets[1]);
         assert.notEqual(budgets[1], budgets[2]);
+    } finally { await app.close(); }
+});
+
+test('배치: 빈 칸으로 옮기면 이동하고 layout.json 에 저장, 다시 받아도 그 자리', async () => {
+    const app = await startApp();
+    try {
+        const before = await (await app.call('GET', '/api/get-channel-list')).json();
+        const res = await app.call('POST', '/api/layout/move', { from: 0, to: 3, layout: before.layout });
+        assert.equal(res.status, 200);
+        const body = await res.json();
+        assert.equal(body.status, 'success');
+        assert.deepEqual(body.channels.map(c => c.slot), [3, 1]);
+        assert.notEqual(body.layout, before.layout);
+        const saved = fs.readFileSync(path.join(path.dirname(app.cctvPath), 'layout.json'), 'utf8');
+        assert.ok(!saved.includes('secret'), '비밀번호를 저장하지 않는다');
+        const again = await (await app.call('GET', '/api/get-channel-list')).json();
+        assert.deepEqual(again.channels.map(c => c.slot), [3, 1]);
+        assert.equal(again.layout, body.layout);
+        assert.equal(app.streams.calls.length, 0, '배치를 바꿔도 영상은 건드리지 않는다');
+    } finally { await app.close(); }
+});
+
+test('배치: 영상이 있는 칸으로 옮기면 서로 바뀐다', async () => {
+    const app = await startApp();
+    try {
+        const before = await (await app.call('GET', '/api/get-channel-list')).json();
+        const body = await (await app.call('POST', '/api/layout/move', { from: 1, to: 0, layout: before.layout })).json();
+        assert.deepEqual(body.channels.map(c => [c.name, c.slot]), [['거실', 1], ['안방', 0]]);
+    } finally { await app.close(); }
+});
+
+test('배치: 다른 기기에서 이미 바뀌었으면 409, 잘못된 칸이면 400', async () => {
+    const app = await startApp();
+    try {
+        const before = await (await app.call('GET', '/api/get-channel-list')).json();
+        assert.equal((await app.call('POST', '/api/layout/move', { from: 0, to: 2, layout: before.layout })).status, 200);
+        assert.equal((await app.call('POST', '/api/layout/move', { from: 1, to: 3, layout: before.layout })).status, 409);
+        const now = await (await app.call('GET', '/api/get-channel-list')).json();
+        for (const body of [{ from: 1, to: 1 }, { from: 1, to: 9 }, { from: 0, to: 1 }, { from: '1', to: 3 }]) {
+            assert.equal((await app.call('POST', '/api/layout/move', { ...body, layout: now.layout })).status, 400, JSON.stringify(body));
+        }
+    } finally { await app.close(); }
+});
+
+test('배치: 카메라를 지우면 그 칸은 비고 다른 카메라는 그대로', async () => {
+    const app = await startApp({ cctvText: TWO + '\r\nrtsp://a:b@192.168.0.7:554/z, 주방' });
+    try {
+        const before = await (await app.call('GET', '/api/get-channel-list')).json();
+        assert.equal((await app.call('POST', '/api/layout/move', { from: 2, to: 3, layout: before.layout })).status, 200);
+        const cam = app.cams()[0];
+        assert.equal((await app.call('DELETE', '/api/cameras/0', { hash: cam.hash })).status, 200);
+        const after = await (await app.call('GET', '/api/get-channel-list')).json();
+        assert.deepEqual(after.channels.map(c => [c.name, c.slot]), [['안방', 1], ['주방', 3]]);
     } finally { await app.close(); }
 });
