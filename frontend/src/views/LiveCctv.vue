@@ -73,6 +73,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { connectStream } from '../webrtc';
+import { nextDownSince, isLongDown } from '../camera-down';
 import draggable from 'vuedraggable';
 import SettingsIcon from '../components/SettingsIcon.vue';
 
@@ -91,6 +92,9 @@ const STATUS_TEXT = {
   media_server: '영상 서버가 실행되지 않고 있습니다. CCTVGO PC의 백신 프로그램을 확인해 주세요',
   signaling: '서버에 연결하지 못했습니다. 다시 시도하는 중...',
 };
+// 카메라가 2분 넘게 응답하지 않을 때 (DHCP 로 카메라 IP 가 바뀐 경우 등)
+const CAMERA_LONG_DOWN_TEXT = '카메라가 응답하지 않습니다.\n카메라 전원과 랜선을 확인해 주세요.\n그래도 안 되면 카메라 IP가 바뀌었을 수 있으니 카메라를 삭제하고 다시 등록해 주세요.';
+const NOW_TICK_MS = 10 * 1000;
 
 // --- 상태 ---
 const cameraList = ref(null);
@@ -108,14 +112,23 @@ let mobileClose = null;
 
 const closers = [];   // 데스크톱 칸별 연결 정리 함수
 const videoElements = reactive([]);
-const status = reactive({});   // 카메라 id → { state, reason }
+const status = reactive({});   // 카메라 id → { state, reason, downSince }
+const now = ref(Date.now());   // 오래 끊긴 칸 판단용 (연결 시도가 없어도 문구가 바뀌게)
+let nowTimer = null;
 
 const statusText = id => {
   const st = status[id];
   if (!st || st.state === 'playing') return '';
+  // 다시 시도하는 동안에도 계속 보여 준다 (1분마다 "연결 중..."으로 깜빡이지 않게)
+  if (isLongDown(st.downSince, now.value)) return CAMERA_LONG_DOWN_TEXT;
   return st.state === 'connecting' ? STATUS_TEXT.connecting : STATUS_TEXT[st.reason] || STATUS_TEXT.network;
 };
-const watchState = id => (state, detail = {}) => { status[id] = { state, reason: detail.reason }; };
+const watchState = (id, stream) => (state, detail = {}) => {
+  const prev = status[id];
+  // 칸 id 는 목록을 다시 받으면 다른 카메라에 붙을 수 있어, 같은 카메라일 때만 이전 기록을 이어 쓴다
+  const prevSince = prev && prev.stream === stream ? prev.downSince : null;
+  status[id] = { state, reason: detail.reason, stream, downSince: nextDownSince(prevSince, state, detail.reason, Date.now()) };
+};
 
 // --- computed ---
 const gridColumns = computed(() => {
@@ -187,7 +200,7 @@ function initMobilePlayer() {
   }
   const cam = currentMobileCamera.value;
   if (!mobileVideoRef.value || cam?.stream == null) return;
-  mobileClose = connectStream(mobileVideoRef.value, cam.stream, { epoch, onState: watchState(cam.id), onStale: reloadCameras });
+  mobileClose = connectStream(mobileVideoRef.value, cam.stream, { epoch, onState: watchState(cam.id, cam.stream), onStale: reloadCameras });
 }
 
 function closeDesktopPlayers() {
@@ -210,7 +223,7 @@ function initPlayers() {
   cameraList.value.forEach((cam, index) => {
     const video = videoElements[index];
     if (!video || cam.stream == null) return;
-    closers.push(connectStream(video, cam.stream, { epoch, onState: watchState(cam.id), onStale: reloadCameras }));
+    closers.push(connectStream(video, cam.stream, { epoch, onState: watchState(cam.id, cam.stream), onStale: reloadCameras }));
   });
 }
 
@@ -270,10 +283,12 @@ onMounted(async () => {
   await nextTick();
   initPlayers();
   keepAliveTimer = setInterval(keepAlive, KEEPALIVE_MS);
+  nowTimer = setInterval(() => { now.value = Date.now(); }, NOW_TICK_MS);
 });
 
 onUnmounted(() => {
   clearInterval(keepAliveTimer);
+  clearInterval(nowTimer);
   mobileQuery.removeEventListener('change', checkMobile);
   window.removeEventListener('resize', checkMobile);
   closeDesktopPlayers();
@@ -343,6 +358,7 @@ h2 {
   font-size: 14px;
   text-align: center;
   word-break: keep-all;
+  white-space: pre-line;   /* 긴 안내 문구의 줄바꿈 */
   pointer-events: none;
 }
 

@@ -2,6 +2,7 @@
 // 연결 정보(SDP)만 서버(/api/live/:k/offer, 로그인 필요)를 거치고, 영상은 고객 PC 의 go2rtc 에서 브라우저로 직접 온다.
 // go2rtc POST 방식은 후보를 나중에 보내는 방식(trickle)이 없어서, 후보 수집을 끝낸 offer 를 보낸다.
 import router from './router';
+import { createStallTracker, videoBytesReceived, STALL_CHECK_MS } from './stall';
 
 const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
 const GATHER_TIMEOUT_MS = 2000;
@@ -75,6 +76,7 @@ export function connectStream(video, k, { epoch = '', onState = () => {}, onStal
   let closed = false;
   let pc = null;
   let timer = null;
+  let stallTimer = null;   // 재생 중 영상이 멈췄는지 주기적으로 본다
   let attempt = 0;
   let detachAttempt = () => {};   // 지금 시도의 playing 리스너 정리 (시도마다 하나만 남게)
 
@@ -88,6 +90,7 @@ export function connectStream(video, k, { epoch = '', onState = () => {}, onStal
     detachAttempt = () => {};
     if (pc) { try { pc.close(); } catch (e) { /* 이미 닫힘 */ } pc = null; }
     clearTimeout(timer);
+    clearInterval(stallTimer);
   };
 
   const stop = () => {
@@ -141,6 +144,15 @@ export function connectStream(video, k, { epoch = '', onState = () => {}, onStal
       clearTimeout(timer);
       attempt = 0;
       onState('playing');
+      // 카메라가 꺼지면 연결은 살아 있고 영상만 끊겨 화면이 멈춘 채로 남는다. 받은 바이트가 늘지 않으면 카메라 문제로 보고 다시 연결한다
+      const tracker = createStallTracker(Date.now());
+      clearInterval(stallTimer);
+      stallTimer = setInterval(async () => {
+        if (!current() || settled) return;
+        const bytes = await videoBytesReceived(myPc);
+        if (!current() || settled) return;
+        if (tracker.update(bytes, Date.now())) fail('camera', { stalled: true });
+      }, STALL_CHECK_MS);
       report({ k, outcome: 'playing', variant, h265, ms: Date.now() - startedAt, ...(await candidateSummary(myPc)) });
     };
     video.addEventListener('playing', onPlaying);
@@ -186,8 +198,10 @@ export function connectStream(video, k, { epoch = '', onState = () => {}, onStal
       await myPc.setRemoteDescription({ type: 'answer', sdp: data.sdp });
       timer = setTimeout(async () => {
         if (!current() || playing || settled) return;
+        // 연결은 됐는데 영상이 안 오면 네트워크가 아니라 카메라 쪽 문제다 (꺼진 카메라에 다시 연결할 때)
+        const reason = myPc.connectionState === 'connected' ? 'camera' : 'network';
         const summary = await candidateSummary(myPc);
-        fail('network', summary);
+        fail(reason, summary);
       }, CONNECT_TIMEOUT_MS);
     } catch (e) {
       fail('signaling', { error: String((e && e.message) || e).slice(0, 100) });
