@@ -1,6 +1,8 @@
 @echo off
 chcp 65001 > nul
 setlocal enabledelayedexpansion
+:: ESC char for colored result banners (Windows 10+ console)
+for /f %%a in ('echo prompt $E ^| cmd') do set "ESC=%%a"
 
 :: 1. 변수 설정 및 초기화
 echo ---------------------------------------------
@@ -34,7 +36,7 @@ copy "%BACKEND_DIR%\.env" "%PACKAGE_DIR%" /Y
 echo [INFO] Copied .env
 ) else (
 echo [ERROR] .env not found. Aborting script.
-exit /b 1
+goto FAIL
 )
 
 :: 4. 사용자 설정 파일 (config.json) 복사 (backend 폴더에서 package로)
@@ -43,7 +45,7 @@ copy "%BACKEND_DIR%\config.json" "%PACKAGE_DIR%" /Y
 echo [INFO] Copied config.json
 ) else (
 echo [ERROR] config.json not found. Aborting script.
-exit /b 1
+goto FAIL
 )
 
 :: 5. CCTV 목록 파일 (cctv.txt) 복사 (backend 폴더에서 package로)
@@ -52,7 +54,7 @@ copy "%BACKEND_DIR%\cctv.txt" "%PACKAGE_DIR%" /Y
 echo [INFO] Copied cctv.txt
 ) else (
 echo [ERROR] cctv.txt not found. Aborting script.
-exit /b 1
+goto FAIL
 )
 
 :: 6. ffmpeg folder (used by go2rtc to convert H.265 cameras to H.264 for PC browsers)
@@ -61,7 +63,7 @@ xcopy "%FFMPEG_DIR%" "%PACKAGE_DIR%\ffmpeg" /E /I /Y
 echo [INFO] Copied ffmpeg folder
 ) else (
 echo [ERROR] ffmpeg folder not found. Aborting script.
-exit /b 1
+goto FAIL
 )
 
 :: 7. go2rtc (video server, MIT license). go2rtc.yaml is generated at service start, so it is not copied
@@ -72,7 +74,7 @@ copy "%ROOT_DIR%go2rtc\LICENSE.txt" "%PACKAGE_DIR%\go2rtc" /Y
 echo [INFO] Copied go2rtc
 ) else (
 echo [ERROR] go2rtc\go2rtc.exe not found. Aborting script.
-exit /b 1
+goto FAIL
 )
 
 :: 9. cloudflare 터널생성
@@ -109,12 +111,12 @@ echo [INFO] Customer ID set in make_package.bat: %CUSTOMER_ID%
 cd %ROOT_DIR%
 
 :: 10. cloudflare 터널폴더 복사
-if exist "%CLOUDFLARE_DIR%" (
+if exist "%CLOUDFLARE_DIR%\%CUSTOMER_ID%" (
 xcopy "%CLOUDFLARE_DIR%\%CUSTOMER_ID%" "%PACKAGE_DIR%\cloudflare" /E /I /Y
 echo [INFO] Copied cloudflare folder
 ) else (
-echo [ERROR] cloudflare folder not found. Aborting script.
-exit /b 1
+echo [ERROR] cloudflare\%CUSTOMER_ID% folder not found ^(tunnel creation failed^). Aborting script.
+goto FAIL
 )
 
 :: 11. README.md 파일 복사
@@ -123,7 +125,7 @@ copy "%ROOT_DIR%\README.md" "%PACKAGE_DIR%" /Y
 echo [INFO] Copied README.md
 ) else (
 echo [ERROR] README.md not found. Aborting script.
-exit /b 1
+goto FAIL
 )
 
 
@@ -133,7 +135,7 @@ copy "%ROOT_DIR%\cctvgo.bat" "%PACKAGE_DIR%" /Y
 echo [INFO] Copied cctvgo.bat
 ) else (
 echo [ERROR] cctvgo.bat not found. Aborting script.
-exit /b 1
+goto FAIL
 )
 
 :: 12-1. utils 폴더 복사
@@ -143,7 +145,7 @@ robocopy "%ROOT_DIR%utils" "%PACKAGE_DIR%\utils" /E /XF *.mp4 /NFL /NDL /NJH /NJ
 echo [INFO] Copied utils folder ^(*.mp4 제외^)
 ) else (
 echo [ERROR] utils folder not found. Aborting script.
-exit /b 1
+goto FAIL
 )
 
 :: 13. 프론트엔드 빌드 (frontend/dist 생성)
@@ -152,7 +154,17 @@ echo [INFO] Installing and building frontend...
 cd /d "%ROOT_DIR%frontend"
 echo [DEBUG] Current Directory 1 (Frontend): %CD%
 call npm install
+if errorlevel 1 (
+echo [ERROR] frontend npm install failed. Aborting script.
+goto FAIL
+)
+:: Remove old dist first so a failed build cannot ship a stale one
+if exist "dist" rd /s /q "dist"
 call npm run build
+if errorlevel 1 (
+echo [ERROR] frontend build failed. Aborting script.
+goto FAIL
+)
 
 :: 14. 프론트엔드 빌드 결과 (frontend/dist) 복사
 cd %ROOT_DIR%
@@ -161,7 +173,7 @@ xcopy "frontend\dist" "%PACKAGE_DIR%\frontend\dist" /E /I /Y
 echo [INFO] Copied frontend/dist folder
 ) else (
 echo [ERROR] frontend/dist folder not found. Aborting script.
-exit /b 1
+goto FAIL
 )
 
 :: 15. 백엔드 빌드 (Executable 생성)
@@ -170,13 +182,39 @@ echo [INFO] Installing backend dependencies and running PKG...
 cd "%BACKEND_DIR%"
 echo [DEBUG] Current Directory 2 (Backend): %CD%
 call npm install
+if errorlevel 1 (
+echo [ERROR] backend npm install failed. Aborting script.
+goto FAIL
+)
 :: PKG 실행: 출력 경로를 ROOT_DIR의 package 폴더로 지정합니다.
 call pkg server.js --targets node18-win-x64 --output "%PACKAGE_DIR%\cctvgo-service.exe"
-echo !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+if errorlevel 1 (
+echo [ERROR] pkg failed. Aborting script.
+goto FAIL
+)
+if not exist "%PACKAGE_DIR%\cctvgo-service.exe" (
+echo [ERROR] cctvgo-service.exe was not created. Aborting script.
+goto FAIL
+)
 
-echo ---------------------------------------------
-echo [SUCCESS] Package build and assembly complete!
-echo Executable is located at: %PACKAGE_DIR%\cctvgo-service.exe
-echo ---------------------------------------------
-
+echo.
+echo %ESC%[42;97m                                                      %ESC%[0m
+echo %ESC%[42;97m   [SUCCESS] 패키지 만들기 성공                       %ESC%[0m
+echo %ESC%[42;97m                                                      %ESC%[0m
+echo %ESC%[92m   접속 주소: https://%CUSTOMER_ID%.cctvgo.app%ESC%[0m
+echo %ESC%[92m   패키지 폴더: %PACKAGE_DIR%%ESC%[0m
+echo.
 pause
+exit /b 0
+
+:FAIL
+cd /d "%ROOT_DIR%"
+echo.
+echo %ESC%[41;97m                                                      %ESC%[0m
+echo %ESC%[41;97m   [FAILED] 패키지 만들기 실패                        %ESC%[0m
+echo %ESC%[41;97m                                                      %ESC%[0m
+echo %ESC%[91m   바로 위의 [ERROR] 줄에서 원인을 확인하세요.%ESC%[0m
+echo %ESC%[91m   package 폴더는 완성되지 않았으니 쓰지 마세요.%ESC%[0m
+echo.
+pause
+exit /b 1
