@@ -10,7 +10,8 @@
           placeholder="Enter password"
           class="input"
         />
-        <button type="submit" class="button">Login</button>
+        <p v-if="error" class="error" role="alert">{{ error }}</p>
+        <button type="submit" class="button" :disabled="busy">Login</button>
       </form>
       <p class="footer">© 2025 CCTVGO. All rights reserved.</p>
     </div>
@@ -22,19 +23,31 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 const password = ref('')
+const error = ref('')
+const busy = ref(false)
 const router = useRouter()
 
+// 틀렸을 때와 여러 번 틀려 잠시 막혔을 때(429) 서버가 보낸 안내를 그대로 보여 준다
 const login = async () => {
-  const res = await fetch('/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ password: password.value })
-  })
-
-  if (res.ok) {
-    router.push('/')
-  } else {
-    alert('Incorrect password')
+  busy.value = true
+  error.value = ''
+  try {
+    const res = await fetch('/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ password: password.value })
+    })
+    if (res.ok) {
+      router.push('/')
+      return
+    }
+    const text = (await res.text().catch(() => '')).trim()
+    error.value = (res.status === 401 || res.status === 429) && text ? text : `로그인하지 못했습니다. (${res.status})`
+    if (res.status === 401) password.value = ''
+  } catch (e) {
+    error.value = '서버에 연결하지 못했습니다. 잠시 뒤 다시 시도하세요.'
+  } finally {
+    busy.value = false
   }
 }
 </script>
@@ -121,6 +134,18 @@ const login = async () => {
 
 .button:hover {
   background-color: #ffcd00;
+}
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.error {
+  margin: -8px 0 16px;
+  font-size: 14px;
+  color: #ff8a80;
+  word-break: keep-all;
 }
 
 .footer {

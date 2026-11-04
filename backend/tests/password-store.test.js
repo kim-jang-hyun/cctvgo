@@ -49,7 +49,7 @@ test('change: 현재 비밀번호가 틀리면 바꾸지 않는다', () => {
 
 test('change: 새 비밀번호 길이/형식 검증', () => {
     const store = createPasswordStore(tempConfig());
-    for (const bad of ['abc', 'x'.repeat(65), 'ab\ncd', 1234, undefined]) {
+    for (const bad of ['abc', '1234567', 'x'.repeat(65), 'abcd\nefgh', 12345678, undefined]) {
         const r = store.change('old-pass', bad);
         assert.equal(r.ok, false, JSON.stringify(bad));
         assert.equal(r.reason, 'invalid_new');

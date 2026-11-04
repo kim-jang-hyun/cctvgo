@@ -104,6 +104,15 @@ goto ASK_CUSTOMER_ID
 )
 echo [INFO] 접속 주소: https://!CUSTOMER_ID!.cctvgo.app
 
+:: 9-1. Per-customer random login password -> package\config.json + info txt
+set "LOGIN_PASSWORD="
+for /f "usebackq delims=" %%p in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT_DIR%make_package_login.ps1" -PackageDir "%PACKAGE_DIR%" -CustomerId "!CUSTOMER_ID!"`) do set "LOGIN_PASSWORD=%%p"
+if not defined LOGIN_PASSWORD (
+echo [ERROR] 로그인 비밀번호를 만들지 못했습니다. Aborting script.
+goto FAIL
+)
+echo [INFO] Login password created ^(package\config.json^)
+
 cd %CLOUDFLARE_DIR%
 :: **변경:** CUSTOMER_ID를 인수로 전달합니다.
 call make_cloudflare_package.bat %CUSTOMER_ID%
@@ -202,7 +211,9 @@ echo %ESC%[42;97m                                                      %ESC%[0m
 echo %ESC%[42;97m   [SUCCESS] 패키지 만들기 성공                       %ESC%[0m
 echo %ESC%[42;97m                                                      %ESC%[0m
 echo %ESC%[92m   접속 주소: https://%CUSTOMER_ID%.cctvgo.app%ESC%[0m
+echo %ESC%[93m   비밀번호:  %LOGIN_PASSWORD%%ESC%[0m
 echo %ESC%[92m   패키지 폴더: %PACKAGE_DIR%%ESC%[0m
+echo %ESC%[92m   고객 이메일에 접속 주소와 비밀번호를 함께 보내세요. ^(package\접속 정보.txt^)%ESC%[0m
 echo.
 pause
 exit /b 0

@@ -29,7 +29,7 @@ import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 
 // backend/settings/password-store.js 와 같은 값
-const MIN_LENGTH = 4;
+const MIN_LENGTH = 8;   // backend/settings/password-store.js 와 같게
 const MAX_LENGTH = 64;
 
 const router = useRouter();

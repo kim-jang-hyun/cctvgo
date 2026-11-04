@@ -10,7 +10,9 @@ const fs = require('fs');
  * 비밀번호가 바뀌면(화면에서든 config.json 직접 수정이든) 옛 태그를 가진 세션은 모두 로그아웃된다.
  */
 
-const MIN_LENGTH = 4;
+// 주소(고객ID.cctvgo.app)는 짐작할 수 있으므로 1234 같은 짧은 비밀번호는 받지 않는다.
+// 이미 쓰던 짧은 비밀번호로 로그인하는 것은 그대로 된다 (바꿀 때만 검사)
+const MIN_LENGTH = 8;
 const MAX_LENGTH = 64;
 
 function tagOf(password) {

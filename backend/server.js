@@ -132,20 +132,9 @@ const go2rtc = new Go2rtcProcess({
 process.on('exit', () => go2rtc.stop());
 for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGBREAK']) process.on(sig, () => process.exit(0));
 
-// 로그인 처리 API
-app.post('/login', (req, res) => {
-  const password = passwordStore.get();
-  if (password === null) return res.status(500).send('Config not found');
-
-  const inputPassword = req.body.password;
-  if (inputPassword === password) {
-    req.session.authenticated = true;
-    req.session.passwordTag = passwordStore.tag();
-    return res.sendStatus(200);
-  } else {
-    return res.status(401).send('비밀번호가 틀렸습니다.');
-  }
-});
+// 로그인 처리 API (같은 접속자가 5번 틀리면 15분 막는다)
+const { registerLoginRoute } = require('./settings/login-guard');
+registerLoginRoute(app, { store: passwordStore });
 
 // 카메라 주소 찾기 + 카메라 관리 API (영상 화면용 /api/get-channel-list 포함)
 const { registerFinderRoutes } = require('./finder/routes');
