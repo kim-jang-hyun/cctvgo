@@ -213,7 +213,7 @@ echo %ESC%[42;97m                                                      %ESC%[0m
 echo %ESC%[92m   접속 주소: https://%CUSTOMER_ID%.cctvgo.app%ESC%[0m
 echo %ESC%[93m   비밀번호:  %LOGIN_PASSWORD%%ESC%[0m
 echo %ESC%[92m   패키지 폴더: %PACKAGE_DIR%%ESC%[0m
-echo %ESC%[92m   고객 이메일에 접속 주소와 비밀번호를 함께 보내세요. ^(package\접속 정보.txt^)%ESC%[0m
+echo %ESC%[92m   고객 이메일에 접속 주소와 비밀번호를 함께 보내세요. ^(package\사용 방법.txt^)%ESC%[0m
 echo.
 pause
 exit /b 0
