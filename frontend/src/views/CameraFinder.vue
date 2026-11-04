@@ -8,12 +8,21 @@
     <!-- 1. 카메라 선택 -->
     <section v-if="step === 'select'" class="card">
       <p class="desc">같은 네트워크(공유기)에 연결된 카메라를 찾습니다. 추가할 카메라 옆의 [추가]를 누르세요.</p>
-      <button :disabled="scanning" @click="runScan">
-        {{ scanning ? '찾는 중... (최대 20초)' : '다시 찾기' }}
-      </button>
+      <!-- 찾는 동안에는 버튼 대신 눈에 띄는 안내를 보여 준다 (기다려야 한다는 것을 알 수 있게) -->
+      <div v-if="scanning" class="scanning" role="status" aria-live="polite">
+        <div class="scan-top">
+          <div class="spinner"></div>
+          <div class="scan-text">
+            <p class="scan-title">카메라를 찾고 있습니다</p>
+            <p class="scan-sub">잠시만 기다려 주세요. 최대 20초 걸립니다. ({{ scanElapsed }}초)</p>
+          </div>
+        </div>
+        <div class="scan-bar"><div class="scan-bar-fill" :style="{ width: scanProgress + '%' }"></div></div>
+      </div>
+      <button v-else @click="runScan">다시 찾기</button>
       <p v-if="scanError" class="error">{{ scanError }}</p>
 
-      <ul v-if="scanned" class="camera-list">
+      <ul v-if="scanned && !scanning" class="camera-list">
         <li v-for="c in cameras" :key="c.ip" class="list-item">
           <span class="grow">
             <strong>{{ c.ip }}</strong>
@@ -24,7 +33,7 @@
           <button v-else class="primary" @click="pickCamera(c)">추가</button>
         </li>
       </ul>
-      <p v-if="scanned && cameras.length === 0" class="muted">찾은 카메라가 없습니다.</p>
+      <p v-if="scanned && !scanning && cameras.length === 0" class="muted">찾은 카메라가 없습니다.</p>
 
       <p class="manual-head">목록에 카메라가 없으면 아래 두 방법 중 <strong>하나</strong>로 추가하세요.</p>
 
@@ -149,7 +158,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { api } from '../api';
 import { messageFor, isAmbiguousAuth, needsLoginWarning, maskedUrl, APPLY_FAILED } from '../finder-messages';
 import LoginWarning from '../components/LoginWarning.vue';
@@ -195,9 +204,23 @@ async function loadRegistered() {
   }
 }
 
+// 찾기 진행 표시: 서버는 진행률을 알려 주지 않으므로 최대 시간(20초) 기준으로 흐른 시간을 보여 준다
+const SCAN_MAX_SEC = 20;
+const scanElapsed = ref(0);
+const scanProgress = computed(() => Math.min(95, (scanElapsed.value / SCAN_MAX_SEC) * 100));
+let scanTimer = null;
+
+function stopScanTimer() {
+  if (scanTimer) clearInterval(scanTimer);
+  scanTimer = null;
+}
+
 async function runScan() {
   scanning.value = true;
   scanError.value = '';
+  scanElapsed.value = 0;
+  stopScanTimer();
+  scanTimer = setInterval(() => { scanElapsed.value++; }, 1000);
   try {
     const data = await api('/api/finder/scan', { method: 'POST', body: '{}' });
     cameras.value = data.cameras;
@@ -205,6 +228,7 @@ async function runScan() {
   } catch (e) {
     scanError.value = e.message;
   } finally {
+    stopScanTimer();
     scanning.value = false;
   }
 }
@@ -318,6 +342,8 @@ onMounted(() => {
   loadRegistered();
   runScan();
 });
+
+onBeforeUnmount(stopScanTimer);
 </script>
 
 <style scoped>
@@ -361,4 +387,12 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .diag { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
 .spinner { width: 32px; height: 32px; border: 4px solid #ddd; border-top-color: #007bff; border-radius: 50%; animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+.scanning { background: #e8f1ff; border: 2px solid #007bff; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.scan-top { display: flex; align-items: center; gap: 14px; }
+.scan-top .spinner { flex-shrink: 0; }
+.scan-text { min-width: 0; }
+.scan-title { margin: 0; font-size: 18px; font-weight: 700; color: #0056b3; }
+.scan-sub { margin: 4px 0 0; font-size: 14px; color: #333; word-break: keep-all; }
+.scan-bar { height: 8px; background: #fff; border-radius: 4px; overflow: hidden; }
+.scan-bar-fill { height: 100%; background: #007bff; border-radius: 4px; transition: width 1s linear; }
 </style>
