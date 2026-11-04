@@ -28,7 +28,7 @@
       <div class="diag-head">
         <strong>진단 정보</strong>
         <div class="diag-actions">
-          <button type="button" class="primary" :disabled="downloading" @click="downloadBundle">{{ downloading ? '만드는 중...' : '진단 파일 받기' }}</button>
+          <button type="button" :disabled="downloading" @click="downloadBundle">{{ downloading ? '만드는 중...' : '진단 파일 받기' }}</button>
           <button type="button" :disabled="loading" @click="copyDiagnostics">{{ copied ? '복사됨' : loading ? '불러오는 중...' : '진단 정보 복사' }}</button>
         </div>
       </div>
@@ -122,8 +122,7 @@ async function copyDiagnostics() {
 .diag { box-sizing: border-box; margin-top: 16px; padding: 14px 16px; background: #fff; border: 1px solid #ddd; border-radius: 8px; }
 .diag-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .diag-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.diag-actions .primary { background: #007bff; border-color: #007bff; color: #fff; }
-.diag-actions .primary:disabled { opacity: 0.6; }
+.diag-actions button:disabled { opacity: 0.6; }
 .diag-desc { margin: 6px 0 0; font-size: 13px; color: #777; }
 .diag-error { margin: 6px 0 0; font-size: 13px; color: #c00; }
 .diag textarea { width: 100%; margin-top: 8px; box-sizing: border-box; font-size: 12px; font-family: monospace; }
