@@ -26,18 +26,16 @@ echo [INFO] Package folder created.
 echo ---------------------------------------------
 echo [INFO] Copying external assets to package folder...
 
-:: 3. 환경 설정 파일 (.env) 복사 (ROOT 폴더에서 package로)
-cd %BACKEND_DIR%
-call generate-env.bat
-cd %ROOT_DIR%
-
-if exist "%BACKEND_DIR%\.env" (
-copy "%BACKEND_DIR%\.env" "%PACKAGE_DIR%" /Y
-echo [INFO] Copied .env
-) else (
-echo [ERROR] .env not found. Aborting script.
+:: 3. Session secret (.env): a NEW random key for every customer package.
+:: Do not copy backend\.env (that one is for development and would be shared by all customers).
+:: 32 bytes from the OS crypto RNG, written as 64 hex chars.
+powershell -NoProfile -Command "$b = New-Object byte[] 32; [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); 'SESSION_SECRET=' + (($b | ForEach-Object { $_.ToString('x2') }) -join '')" > "%PACKAGE_DIR%\.env"
+findstr /R /C:"^SESSION_SECRET=[0-9a-f]*$" "%PACKAGE_DIR%\.env" >nul
+if errorlevel 1 (
+echo [ERROR] Could not create session secret ^(.env^). Aborting script.
 goto FAIL
 )
+echo [INFO] Created new session secret ^(.env^)
 
 :: 4. 사용자 설정 파일 (config.json) 복사 (backend 폴더에서 package로)
 if exist "%BACKEND_DIR%\config.json" (
@@ -128,12 +126,13 @@ echo [ERROR] cloudflare\%CUSTOMER_ID% folder not found ^(tunnel creation failed^
 goto FAIL
 )
 
-:: 11. README.md 파일 복사
-if exist "%ROOT_DIR%\README.md" (
-copy "%ROOT_DIR%\README.md" "%PACKAGE_DIR%" /Y
-echo [INFO] Copied README.md
+:: 11. Customer notice files (license, disclaimer) from customer\*.txt
+:: README.md is for developers and is not shipped. Wildcard keeps Korean file names out of this file.
+if exist "%ROOT_DIR%customer\*.txt" (
+copy "%ROOT_DIR%customer\*.txt" "%PACKAGE_DIR%" /Y >nul
+echo [INFO] Copied customer notice files
 ) else (
-echo [ERROR] README.md not found. Aborting script.
+echo [ERROR] customer\*.txt not found. Aborting script.
 goto FAIL
 )
 
